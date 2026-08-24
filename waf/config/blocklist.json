@@ -1,0 +1,14 @@
+{
+  "ip_blocklist": [
+    "198.51.100.42",
+    "203.0.113.99"
+  ],
+  "user_agent_blocklist": [
+    "sqlmap",
+    "nikto",
+    "nmap",
+    "masscan",
+    "gobuster",
+    "dirbuster"
+  ]
+}
