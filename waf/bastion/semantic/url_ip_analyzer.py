@@ -1,5 +1,5 @@
 """
-Advanced URL & IP Semantic SSRF Analyzer (SafeLine-Grade Engine).
+Advanced URL & IP Semantic SSRF Analyzer.
 Decodes multi-format IPs (decimal integers, hex, octal, shortened, IPv6),
 detects cloud metadata endpoints, user-info obfuscations, and dangerous protocol schemes with >95% accuracy.
 """

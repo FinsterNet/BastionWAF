@@ -1,5 +1,5 @@
 """
-Advanced SQL Semantic Analysis Engine (SafeLine-Grade Tokenizer & AST Grammar Validator).
+Advanced SQL Semantic Analysis Engine (AST Tokenizer & Grammar Validator).
 Parses raw inputs into SQL lexical tokens, unwraps dialect evasions, and evaluates structural
 AST relationships to achieve >95% attack detection while ensuring zero false positives on natural text.
 """

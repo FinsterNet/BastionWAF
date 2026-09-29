@@ -1,5 +1,5 @@
 """
-Unit tests for the SafeLine-inspired Semantic Analysis Parsers.
+Unit tests for the Context-Aware Semantic Analysis Parsers.
 """
 
 from bastion.semantic.sql_parser import SQLSemanticParser

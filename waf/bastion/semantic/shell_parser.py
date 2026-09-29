@@ -1,5 +1,5 @@
 """
-Advanced Shell Command & RCE Semantic Analyzer (SafeLine-Grade Engine).
+Advanced Shell Command & RCE Semantic Analyzer.
 Evaluates shell operator grammar, parameter expansion evasions (${IFS}, concatenation),
 pipes, subshells, reverse shells, and download execution chains with >95% accuracy.
 """

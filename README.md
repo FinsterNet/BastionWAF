@@ -2,14 +2,14 @@
 
 # 🛡️ Bastion WAF
 
-**Next-Gen Web Application Firewall featuring SafeLine-Inspired Semantic AST Analysis & 3-Tier Adaptive Bot Challenges**
+**Next-Gen Web Application Firewall featuring Context-Aware Semantic AST Analysis & 3-Tier Adaptive Bot Challenges**
 
 [![CI Tests](https://github.com/FinsterNet/BastionWAF/actions/workflows/ci.yml/badge.svg)](https://github.com/FinsterNet/BastionWAF/actions)
 [![Python Version](https://img.shields.io/badge/python-3.11%20%7C%203.12%20%7C%203.13%20%7C%203.14-blue.svg)](https://www.python.org/)
 [![Tests Passing](https://img.shields.io/badge/tests-103%2F103%20passing-brightgreen.svg)](https://github.com/FinsterNet/BastionWAF)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![OWASP Coverage](https://img.shields.io/badge/OWASP-Top%2010%20%2B%20API-red.svg)](https://owasp.org)
-[![SafeLine Engine](https://img.shields.io/badge/Engine-SafeLine%20Semantic%20AST-indigo.svg)](https://github.com/FinsterNet/BastionWAF)
+[![Semantic AST Engine](https://img.shields.io/badge/Engine-Semantic%20AST%20Lexer-indigo.svg)](https://github.com/FinsterNet/BastionWAF)
 
 [Features](#-key-features) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [Rule Coverage](#-security-rule-coverage-28-rules) • [Docker](#-docker-deployment) • [Testing](#-automated-testing)
 
@@ -19,7 +19,7 @@
 
 ## 📌 Overview
 
-**Bastion WAF** is an enterprise-grade, high-performance Web Application Firewall built in Python. Unlike conventional regex-based WAFs that trigger false alarms on conversational text, arithmetic formulas, or database queries, Bastion WAF implements a **context-aware lexical tokenizer and AST grammar analysis engine** inspired by Chaitin SafeLine.
+**Bastion WAF** is an enterprise-grade, high-performance Web Application Firewall built in Python. Unlike conventional regex-based WAFs that trigger false alarms on conversational text, arithmetic formulas, or database queries, Bastion WAF implements an **intelligent context-aware lexical tokenizer and AST grammar analysis engine**.
 
 It combines semantic syntax validation, signature scoring, multi-pass recursive decoders, and a **3-tier adaptive Slider CAPTCHA challenge** to safeguard web applications and APIs from zero-day exploits, evasions, and automated bot swarms.
 
@@ -27,7 +27,7 @@ It combines semantic syntax validation, signature scoring, multi-pass recursive 
 
 ## 🚀 Key Features
 
-- **🧠 SafeLine-Inspired Semantic AST Engine**: Parses payloads into abstract syntax trees and evaluated grammar tokens (SQL, HTML/JS, Shell, Path Canonicalization, Multi-format IP) to evaluate *true execution intent* rather than blind keyword matching.
+- **🧠 Context-Aware Semantic AST Engine**: Parses payloads into abstract syntax trees and evaluated grammar tokens (SQL, HTML/JS, Shell, Path Canonicalization, Multi-format IP) to evaluate *true execution intent* rather than blind keyword matching.
 - **⚡ Zero False Positives**: Cleanly permits natural language (`"select goods from store"`, `"1 < 2 in math class"`, `"curl up with a book"`) while blocking evasive bypasses.
 - **🧩 3-Tier Adaptive Response Policy**:
   - **Tier 1 (Critical Exploits)**: Immediate `HTTP 403 Forbidden` hard block.
@@ -209,7 +209,7 @@ BastionWAF/
 │   │   ├── challenge/          # 3-Tier Slider CAPTCHA & HMAC verification engine
 │   │   ├── core/               # Reverse proxy, normalizer, inspector & scoring engine
 │   │   ├── rules/              # 28 categorized OWASP, API, and bot defense rules
-│   │   └── semantic/           # SafeLine-inspired AST grammar & semantic analyzers
+│   │   └── semantic/           # Context-aware AST grammar & semantic analyzers
 │   ├── config/                 # Dynamic rule configs and proxy settings
 │   ├── dashboard/              # Single-page real-time SOC monitoring interface
 │   ├── database/               # SQLite event database and CRUD layer

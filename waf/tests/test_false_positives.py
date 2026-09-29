@@ -1,7 +1,7 @@
 """
 False Positive Verification Tests.
 Verifies that legitimate user queries, sentences, and math comparisons
-are NOT blocked by the SafeLine-inspired Semantic Analysis Engine.
+are NOT blocked by the Context-Aware Semantic Analysis Engine.
 """
 
 from bastion.core.engine import Engine

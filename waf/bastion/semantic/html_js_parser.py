@@ -1,5 +1,5 @@
 """
-Advanced Context-Aware HTML & JavaScript Semantic Parser (SafeLine-Grade Engine).
+Advanced Context-Aware HTML & JavaScript Semantic Parser.
 Accurately detects real DOM/JavaScript execution contexts, event handlers, and obfuscated pseudo-protocols
 with >95% coverage while eliminating false positives on natural text and mathematical inequalities.
 """

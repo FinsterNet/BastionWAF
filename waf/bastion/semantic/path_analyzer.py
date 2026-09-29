@@ -1,5 +1,5 @@
 """
-Advanced Path Traversal and Local File Inclusion (LFI) Semantic Analyzer (SafeLine-Grade).
+Advanced Path Traversal and Local File Inclusion (LFI) Semantic Analyzer.
 Performs canonical path normalization, multi-encoding unwrapping, wrapper detection,
 and sensitive system target inspection with >95% accuracy.
 """

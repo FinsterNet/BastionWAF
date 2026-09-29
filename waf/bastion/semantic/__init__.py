@@ -1,5 +1,5 @@
 """
-SafeLine-inspired Semantic Analysis Engine Package for Bastion WAF.
+Intelligent Semantic Analysis Engine Package for Bastion WAF.
 Provides tokenizers, AST parsers, and context-aware lexical analyzers to minimize false positives.
 """
 

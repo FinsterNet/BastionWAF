@@ -1,6 +1,6 @@
 # Bastion WAF — Next-Gen Security Gateway & SOC
 
-A high-performance Web Application Firewall (WAF) reverse proxy featuring a SafeLine-inspired Semantic Analysis Engine (AST Tokenizer & Grammar Parsers), categorized threat protection (OWASP Top 10, API Security, Bot Protection), and real-time SOC management dashboard.
+A high-performance Web Application Firewall (WAF) reverse proxy featuring an intelligent Semantic Analysis Engine (AST Tokenizer & Grammar Parsers), categorized threat protection (OWASP Top 10, API Security, Bot Protection), and real-time SOC management dashboard.
 
 ---
 
@@ -22,7 +22,7 @@ python3 main.py
 
 ---
 
-## SafeLine-Inspired Semantic Detection Engine
+## Context-Aware Semantic Detection Engine
 
 Bastion WAF uses a **context-aware lexical tokenizer and AST grammar analysis engine** to eliminate false positives on natural language, mathematics, and legitimate user text while catching zero-day evasions:
 - **SQL Lexer & AST Validator**: Evaluates true tautologies, stacked DDL/DML, and dangerous function calls in query contexts rather than blind keyword matching.

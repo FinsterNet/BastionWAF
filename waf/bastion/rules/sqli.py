@@ -1,6 +1,6 @@
 """
 SQL injection detection rule (OWASP CRS 942100).
-Powered by SafeLine-style Semantic AST & Lexer Tokenization.
+Powered by Context-Aware Semantic AST & Lexer Tokenization.
 """
 
 from ..semantic.sql_parser import SQLSemanticParser
