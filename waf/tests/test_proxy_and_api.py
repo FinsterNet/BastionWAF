@@ -51,3 +51,19 @@ def test_api_server_endpoints():
     res = client.get("/api/export/csv")
     assert res.status_code == 200
     assert "text/csv" in res.headers["content-type"]
+
+    # Test Sandbox /api/simulate
+    sim_res = client.post(
+        "/api/simulate",
+        json={
+            "method": "GET",
+            "path": "/search",
+            "query_string": "q=admin' OR '1'='1",
+            "body": "",
+            "headers": {},
+            "client_ip": "10.0.0.1",
+        },
+    )
+    assert sim_res.status_code == 200
+    assert sim_res.json()["blocked"] is True
+    assert sim_res.json()["rule_id"] == "942100"

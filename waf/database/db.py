@@ -38,7 +38,6 @@ def init_db():
             """
         )
 
-        # Ensure schema migrations
         cursor = conn.cursor()
         cursor.execute("PRAGMA table_info(events)")
         existing_cols = {row[1] for row in cursor.fetchall()}
@@ -46,6 +45,16 @@ def init_db():
             conn.execute("ALTER TABLE events ADD COLUMN action TEXT")
         if "payload_snippet" not in existing_cols:
             conn.execute("ALTER TABLE events ADD COLUMN payload_snippet TEXT DEFAULT ''")
+        if "rule_score" not in existing_cols:
+            conn.execute("ALTER TABLE events ADD COLUMN rule_score REAL DEFAULT 0.0")
+        if "semantic_score" not in existing_cols:
+            conn.execute("ALTER TABLE events ADD COLUMN semantic_score REAL DEFAULT 0.0")
+        if "total_score" not in existing_cols:
+            conn.execute("ALTER TABLE events ADD COLUMN total_score REAL DEFAULT 0.0")
+        if "raw_payload" not in existing_cols:
+            conn.execute("ALTER TABLE events ADD COLUMN raw_payload TEXT DEFAULT ''")
+        if "normalized_payload" not in existing_cols:
+            conn.execute("ALTER TABLE events ADD COLUMN normalized_payload TEXT DEFAULT ''")
 
         conn.execute(
             """
@@ -70,17 +79,42 @@ def init_db():
         )
 
         default_rules = [
-            ("942100", "SQL Injection (SQLi) Shield", "SQLi", 1),
-            ("941100", "Cross-Site Scripting (XSS) Filter", "XSS", 1),
-            ("930120", "Path Traversal / LFI Guard", "Path Traversal", 1),
-            ("932100", "Remote Code Execution (RCE) Engine", "RCE", 1),
-            ("934100", "Server-Side Request Forgery (SSRF) Guard", "SSRF", 1),
-            ("930100", "Remote Code Execution (RCE) Engine", "RCE", 1),
+            # Category 1: OWASP Top 10
+            ("942100", "SQL Injection (SQLi) Shield", "OWASP Top 10", 1),
+            ("941100", "Cross-Site Scripting (XSS) Filter", "OWASP Top 10", 1),
+            ("930120", "Path Traversal / LFI Guard", "OWASP Top 10", 1),
+            ("932100", "Remote Code Execution (RCE) Engine", "OWASP Top 10", 1),
+            ("934100", "Server-Side Request Forgery (SSRF) Guard", "OWASP Top 10", 1),
+            ("933100", "Server-Side Template Injection (SSTI) Guard", "OWASP Top 10", 1),
+            ("933200", "XML External Entity (XXE) Shield", "OWASP Top 10", 1),
+            ("933300", "Insecure Deserialization Shield", "OWASP Top 10", 1),
+            ("933400", "Malicious File Upload & Webshell Guard", "OWASP Top 10", 1),
+            ("933500", "JNDI / Log4j Lookup Shield", "OWASP Top 10", 1),
+            ("933600", "JavaScript Prototype Pollution Filter", "OWASP Top 10", 1),
+            ("921100", "CRLF Injection & Request Smuggling Shield", "OWASP Top 10", 1),
+            ("935100", "Open Redirect & Host Header Injection Guard", "OWASP Top 10", 1),
+            ("942200", "LDAP & XPath Injection Shield", "OWASP Top 10", 1),
+            ("930200", "Sensitive Config & Backup Snooping Guard", "OWASP Top 10", 1),
+            # Category 2: API Security
+            ("950100", "API Mass Assignment & Privilege Escalation Guard", "API Security", 1),
+            ("950200", "GraphQL Introspection & Depth Abuse Guard", "API Security", 1),
+            ("950300", "Secret Key & Token URI Leakage Guard", "API Security", 1),
+            ("950400", "HTTP Verb & Method Tampering Shield", "API Security", 1),
+            ("950500", "JSON/XML Payload Bomb & Parser DoS Guard", "API Security", 1),
+            ("950600", "CORS Origin Abuse & Null Origin Guard", "API Security", 1),
+            ("950700", "JWT None-Algorithm & Signature Tampering Guard", "API Security", 1),
+            # Category 3: Bot Protection
+            ("960100", "Vulnerability Scanner Signatures Shield", "Bot Protection", 1),
+            ("960200", "Headless Automation Framework Guard", "Bot Protection", 1),
+            ("960300", "Sliding-Window CC Flood & Rate Limiter", "Bot Protection", 1),
+            ("960400", "Credential Stuffing & Default Credentials Guard", "Bot Protection", 1),
+            ("960500", "HTTP Header Anomaly & Protocol Violation Guard", "Bot Protection", 1),
+            ("960600", "Cryptomining Script & Stratum Blocker", "Bot Protection", 1),
         ]
         for r in default_rules:
             conn.execute(
-                "INSERT OR IGNORE INTO waf_rules (rule_id, rule_name, category, enabled) VALUES (?, ?, ?, ?)",
-                r,
+                "INSERT OR REPLACE INTO waf_rules (rule_id, rule_name, category, enabled) VALUES (?, ?, ?, COALESCE((SELECT enabled FROM waf_rules WHERE rule_id = ?), ?))",
+                (r[0], r[1], r[2], r[0], r[3]),
             )
 
         cursor = conn.cursor()
@@ -88,7 +122,7 @@ def init_db():
         count_row = cursor.fetchone()
         if count_row and count_row[0] == 0:
             conn.execute(
-                "INSERT INTO protected_sites (id, domain, upstream, ssl_status, defense_mode) VALUES (1, '127.0.0.1:8080', '127.0.0.1:5000', 'Active', 1)"
+                "INSERT INTO protected_sites (id, domain, upstream, ssl_status, defense_mode) VALUES (1, '127.0.0.1:8080', '127.0.0.1:3000', 'Active', 1)"
             )
         conn.commit()
 
@@ -102,14 +136,22 @@ def log_event(
     reason: str = "",
     action: Optional[str] = None,
     payload_snippet: str = "",
+    rule_score: float = 0.0,
+    semantic_score: float = 0.0,
+    total_score: float = 0.0,
+    raw_payload: str = "",
+    normalized_payload: str = "",
 ):
     if action is None:
         action = "403 Blocked" if blocked else "200 Allowed"
     with get_connection() as conn:
         conn.execute(
             """
-            INSERT INTO events (timestamp, client_ip, method, path, blocked, rule_id, reason, action, payload_snippet)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO events (
+                timestamp, client_ip, method, path, blocked, rule_id, reason, action,
+                payload_snippet, rule_score, semantic_score, total_score, raw_payload, normalized_payload
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S"),
@@ -121,6 +163,11 @@ def log_event(
                 reason,
                 action,
                 payload_snippet,
+                rule_score,
+                semantic_score,
+                total_score,
+                raw_payload,
+                normalized_payload,
             ),
         )
         conn.commit()
@@ -135,14 +182,18 @@ def get_stats() -> Dict[str, Any]:
         cursor.execute("SELECT COUNT(*) FROM events WHERE blocked = 1")
         blocked = cursor.fetchone()[0]
 
+        cursor.execute("SELECT COUNT(*) FROM events WHERE action = 'CAPTCHA Challenged'")
+        challenged = cursor.fetchone()[0]
+
         cursor.execute("SELECT COUNT(*) FROM protected_sites")
         sites = cursor.fetchone()[0]
 
         return {
             "total_requests": total,
             "blocked_attacks": blocked,
+            "challenged_requests": challenged,
             "protected_domains": sites,
-            "latency_ms": 0.42,
+            "latency_ms": 0.38,
         }
 
 

@@ -1,2 +1,2 @@
 # BastionWAF
-🛡️ Rule-based Web Application Firewall for detecting and blocking SQLi &amp; XSS attacks with real-time threat monitoring.
+🛡️ Next-Gen Web Application Firewall featuring a SafeLine-inspired Semantic Analysis Engine (AST Tokenizer & Grammar Parsers) to eliminate false positives and block complex web application attacks with real-time SOC threat telemetry.

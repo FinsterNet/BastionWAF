@@ -14,6 +14,10 @@ from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from bastion.core.engine import Engine
+from bastion.core.inspector import inspect_request
+from bastion.challenge.evaluator import RiskDecision, RiskEvaluator
+
 from database.db import (
     add_site,
     clear_logs,
@@ -32,6 +36,7 @@ from database.db import (
 init_db()
 
 app = FastAPI(title="Bastion WAF API & Dashboard Server")
+sim_engine = Engine()
 
 app.add_middleware(
     CORSMiddleware,
@@ -124,13 +129,13 @@ def remove_site(site_id: int):
 def system_metrics():
     # Attempt to read live memory / CPU info
     cpu_percent = 4.8
-    ram_usage_mb = 138.5
+    ram_used_mb = 138.5
     total_ram_gb = 8.0
     try:
         import psutil
         cpu_percent = psutil.cpu_percent(interval=0.1)
         mem = psutil.virtual_memory()
-        ram_usage_mb = round(mem.used / (1024 * 1024), 1)
+        ram_used_mb = round(mem.used / (1024 * 1024), 1)
         total_ram_gb = round(mem.total / (1024 * 1024 * 1024), 1)
     except Exception:
         # Fallback if psutil not installed in current env
@@ -143,15 +148,51 @@ def system_metrics():
 
     return {
         "cpu_percent": cpu_percent,
-        "ram_used_mb": ram_usage_mb,
+        "ram_used_mb": ram_used_mb,
         "ram_total_gb": total_ram_gb,
-        "ram_percent": round((ram_usage_mb / (total_ram_gb * 1024)) * 100, 1) if total_ram_gb else 15.0,
+        "ram_percent": round((ram_used_mb / (total_ram_gb * 1024)) * 100, 1) if total_ram_gb else 15.0,
         "uptime": uptime_str,
         "uptime_seconds": uptime_sec,
         "platform": platform.platform(),
         "python_version": platform.python_version(),
         "proxy_status": "ONLINE (Port 8080)",
         "engine_state": "ACTIVE BLOCKING",
+    }
+
+
+class PayloadSimulateRequest(BaseModel):
+    method: str = "GET"
+    path: str = "/search"
+    query_string: str = ""
+    body: str = ""
+    headers: dict = {}
+    client_ip: str = "192.168.1.100"
+
+
+@app.post("/api/simulate")
+def simulate_payload(req: PayloadSimulateRequest):
+    inspection = inspect_request(
+        method=req.method,
+        path=req.path,
+        query_string=req.query_string,
+        headers=req.headers,
+        body=req.body.encode("utf-8"),
+        client_ip=req.client_ip,
+    )
+    scored = sim_engine.evaluate_scored(inspection.request)
+    return {
+        "blocked": (scored.action.value == "BLOCK"),
+        "action": scored.action.value,
+        "rule_id": scored.primary_rule_id,
+        "reason": scored.primary_reason,
+        "rule_score": scored.rule_score,
+        "semantic_score": scored.semantic_score,
+        "total_score": scored.total_score,
+        "semantic_category": scored.semantic_category,
+        "matched_archetype": scored.matched_archetype,
+        "raw_payload": scored.raw_sample,
+        "normalized_payload": scored.normalized_sample,
+        "normalized_targets_checked": len(inspection.request.targets),
     }
 
 

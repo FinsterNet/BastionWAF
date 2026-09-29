@@ -1,7 +1,6 @@
 {
   "proxy_port": 8080,
   "dashboard_port": 8000,
-  "upstream_port": 5000,
-  "default_upstream": "http://127.0.0.1:5000",
+  "default_upstream": "http://127.0.0.1:3000",
   "timeout_seconds": 10.0
 }

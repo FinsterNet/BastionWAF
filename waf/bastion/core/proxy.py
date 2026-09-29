@@ -1,22 +1,42 @@
 """
-High-Performance WAF Reverse Proxy with dynamic upstream routing,
-live telemetry logging, and defense bypass support.
+High-Performance WAF Reverse Proxy with Adaptive Risk-Based Slider CAPTCHA Challenge,
+dynamic upstream routing, live telemetry logging, and defense bypass support.
 """
 
 from contextlib import asynccontextmanager
+import json
 import logging
+from pathlib import Path
 from typing import Optional, Tuple
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response
+from pydantic import BaseModel
 
 from .engine import Engine
 from .inspector import inspect_request
+from .scorer import ActionDecision
+from ..challenge.captcha import (
+    CLEARANCE_COOKIE_NAME,
+    generate_clearance_cookie,
+    verify_challenge_solution,
+    verify_clearance_cookie,
+)
+from ..challenge.evaluator import RiskDecision, RiskEvaluator
+from ..challenge.page import render_captcha_page
 from database.db import get_enabled_rule_ids, get_sites, init_db, log_event
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_UPSTREAM = "http://127.0.0.1:5000"
+CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "config.json"
+DEFAULT_UPSTREAM = "http://127.0.0.1:3000"
+if CONFIG_PATH.exists():
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            cfg = json.load(f)
+            DEFAULT_UPSTREAM = cfg.get("default_upstream", DEFAULT_UPSTREAM)
+    except Exception:
+        pass
 
 HOP_BY_HOP_HEADERS = {
     "host",
@@ -40,8 +60,15 @@ async def lifespan(app: FastAPI):
     await app.state.client.aclose()
 
 
-app = FastAPI(title="Bastion WAF Reverse Proxy", lifespan=lifespan)
+app = FastAPI(title="Bastion WAF Reverse Proxy & Challenge Gateway", lifespan=lifespan)
 engine = Engine()
+
+
+class CaptchaVerifyPayload(BaseModel):
+    token: str
+    user_x: float
+    duration_ms: float = 500.0
+    trajectory_count: int = 5
 
 
 def resolve_upstream_and_mode(host: str) -> Tuple[str, bool]:
@@ -59,11 +86,69 @@ def resolve_upstream_and_mode(host: str) -> Tuple[str, bool]:
     return DEFAULT_UPSTREAM, True
 
 
+@app.post("/__bastion_captcha_verify__")
+async def verify_captcha_endpoint(request: Request, payload: CaptchaVerifyPayload):
+    """
+    Verification API endpoint called by the interactive Slider CAPTCHA page.
+    """
+    client_ip = request.client.host if request.client else "127.0.0.1"
+
+    success, msg = verify_challenge_solution(
+        token=payload.token,
+        user_x=payload.user_x,
+        duration_ms=payload.duration_ms,
+        trajectory_count=payload.trajectory_count,
+    )
+
+    if not success:
+        log_event(
+            client_ip=client_ip,
+            method="POST",
+            path="/__bastion_captcha_verify__",
+            blocked=True,
+            rule_id="CHALLENGE_FAILED",
+            reason=f"CAPTCHA verification failed: {msg}",
+            action="Challenge Failed",
+            payload_snippet=f"Offset: {payload.user_x}, Duration: {payload.duration_ms}ms",
+        )
+        return JSONResponse(status_code=400, content={"status": "error", "message": msg})
+
+    # Issue clearance cookie
+    clearance_cookie = generate_clearance_cookie(client_ip)
+
+    log_event(
+        client_ip=client_ip,
+        method="POST",
+        path="/__bastion_captcha_verify__",
+        blocked=False,
+        rule_id="CHALLENGE_SOLVED",
+        reason="Interactive Slider CAPTCHA solved by human user",
+        action="Clearance Granted",
+        payload_snippet=f"Valid slide duration: {payload.duration_ms:.0f}ms",
+    )
+
+    res = JSONResponse(content={"status": "ok", "message": "Verification successful"})
+    res.set_cookie(
+        key=CLEARANCE_COOKIE_NAME,
+        value=clearance_cookie,
+        max_age=900,
+        path="/",
+        httponly=True,
+        samesite="lax",
+    )
+    return res
+
+
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
 async def waf_proxy(request: Request, path: str):
+    # Skip proxying the internal verification endpoint
+    if path == "__bastion_captcha_verify__":
+        return JSONResponse({"status": "error", "message": "Use POST method"}, status_code=405)
+
     body = await request.body()
     query_string = request.url.query
     headers = dict(request.headers)
+    cookies = dict(request.cookies)
     client_ip = request.client.host if request.client else "127.0.0.1"
     host_header = request.headers.get("host", "127.0.0.1:8080")
 
@@ -85,41 +170,95 @@ async def waf_proxy(request: Request, path: str):
     except Exception:
         enabled_rules = None
 
-    verdict = engine.evaluate(inspection.request, enabled_rule_ids=enabled_rules)
+    # 1. Multi-Stage Evaluation (Rules + Semantic Embeddings + Combined Scorer)
+    scored = engine.evaluate_scored(inspection.request, enabled_rule_ids=enabled_rules)
 
-    # Determine snippet of payload for audit log inspection
-    payload_sample = ""
-    if query_string:
-        payload_sample += f"Query: {query_string}\n"
-    if body:
-        try:
-            payload_sample += f"Body: {body.decode('utf-8', errors='replace')[:500]}\n"
-        except Exception:
-            pass
-    if "user-agent" in headers:
-        payload_sample += f"User-Agent: {headers['user-agent']}\n"
+    has_clearance = False
+    clearance_token = cookies.get(CLEARANCE_COOKIE_NAME, "")
+    if clearance_token:
+        has_clearance = verify_clearance_cookie(clearance_token, client_ip)
 
-    # If defense mode is disabled for this site (Bypass Mode), do not block
-    is_blocked = verdict.blocked and defense_active
+    # 2. Risk & Adaptive Action Decision
+    effective_action = scored.action
+    if effective_action == ActionDecision.CHALLENGE and has_clearance:
+        effective_action = ActionDecision.ALLOW
 
-    # Log event to database
-    log_event(
-        client_ip=client_ip,
-        method=request.method,
-        path=target_path,
-        blocked=is_blocked,
-        rule_id=verdict.rule_id if verdict.blocked else "",
-        reason=verdict.reason if verdict.blocked else ("Clean Request" if defense_active else "Bypass Mode Allowed"),
-        action="403 Blocked" if is_blocked else ("200 Allowed" if defense_active else "Bypassed Allowed"),
-        payload_snippet=payload_sample[:500],
-    )
+    payload_sample = scored.raw_sample or (query_string if query_string else target_path)
 
-    # Intercept attack vector if blocking is active
-    if is_blocked:
+    # If defense mode is disabled for this site (Bypass Mode), allow all
+    if not defense_active:
+        log_event(
+            client_ip=client_ip,
+            method=request.method,
+            path=target_path,
+            blocked=False,
+            rule_id=scored.primary_rule_id,
+            reason="Bypass Mode Active",
+            action="Bypassed Allowed",
+            payload_snippet=payload_sample[:500],
+            rule_score=scored.rule_score,
+            semantic_score=scored.semantic_score,
+            total_score=scored.total_score,
+            raw_payload=scored.raw_sample,
+            normalized_payload=scored.normalized_sample,
+        )
+    elif effective_action == ActionDecision.BLOCK:
+        # Tier 1: Confirmed Threat / High Anomaly -> HTTP 403 Forbidden
+        log_event(
+            client_ip=client_ip,
+            method=request.method,
+            path=target_path,
+            blocked=True,
+            rule_id=scored.primary_rule_id,
+            reason=scored.primary_reason,
+            action="403 Blocked",
+            payload_snippet=payload_sample[:500],
+            rule_score=scored.rule_score,
+            semantic_score=scored.semantic_score,
+            total_score=scored.total_score,
+            raw_payload=scored.raw_sample,
+            normalized_payload=scored.normalized_sample,
+        )
         return Response(
-            content=f'{{"blocked": true, "rule": "{verdict.rule_id}", "reason": "{verdict.reason}", "status": 403}}',
+            content=f'{{"blocked": true, "rule": "{scored.primary_rule_id}", "reason": "{scored.primary_reason}", "total_score": {scored.total_score}, "rule_score": {scored.rule_score}, "semantic_score": {scored.semantic_score}, "status": 403}}',
             status_code=403,
             media_type="application/json",
+        )
+    elif effective_action == ActionDecision.CHALLENGE:
+        # Tier 2: Suspicious Anomaly / Medium Score -> Serve Interactive Slider CAPTCHA
+        log_event(
+            client_ip=client_ip,
+            method=request.method,
+            path=target_path,
+            blocked=False,
+            rule_id=scored.primary_rule_id or "ANOMALY_CHALLENGE",
+            reason=scored.primary_reason,
+            action="CAPTCHA Challenged",
+            payload_snippet=payload_sample[:500],
+            rule_score=scored.rule_score,
+            semantic_score=scored.semantic_score,
+            total_score=scored.total_score,
+            raw_payload=scored.raw_sample,
+            normalized_payload=scored.normalized_sample,
+        )
+        captcha_html = render_captcha_page(client_ip=client_ip, target_path=target_path, reason=scored.primary_reason)
+        return HTMLResponse(content=captcha_html, status_code=200)
+    else:
+        # Tier 3: Clean / Verified Human Session -> Forward to Upstream
+        log_event(
+            client_ip=client_ip,
+            method=request.method,
+            path=target_path,
+            blocked=False,
+            rule_id="",
+            reason="Clean Request",
+            action="200 Allowed",
+            payload_snippet=payload_sample[:500],
+            rule_score=scored.rule_score,
+            semantic_score=scored.semantic_score,
+            total_score=scored.total_score,
+            raw_payload=scored.raw_sample,
+            normalized_payload=scored.normalized_sample,
         )
 
     # Prepare forwarding headers
