@@ -1,0 +1,39 @@
+name: 🐛 Bug Report
+description: Report a bug, crash, or unexpected behavior in Bastion WAF
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report an issue! Please ensure sensitive vulnerability disclosures are reported according to our [Security Policy](https://github.com/FinsterNet/BastionWAF/blob/main/SECURITY.md).
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: OS version, Python version, etc.
+      placeholder: e.g. Arch Linux, Python 3.12, Firefox 125
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce the problem?
+      placeholder: |
+        1. Start Bastion WAF with `./start.sh`
+        2. Send request to `http://127.0.0.1:8080/...`
+        3. See error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected Behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual Behavior / Traceback
+      description: What actually occurred? Include error messages or logs.

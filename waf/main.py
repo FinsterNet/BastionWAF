@@ -32,12 +32,14 @@ def free_port(port: int):
         pass
 
 
-def run_dashboard(host: str = "127.0.0.1", port: int = 8000):
+def run_dashboard(host: str = None, port: int = 8000):
+    host = host or os.environ.get("BASTION_HOST", "127.0.0.1")
     os.chdir(str(WAF_DIR))
     uvicorn.run("api.server:app", host=host, port=port, log_level="warning")
 
 
-def run_proxy(host: str = "127.0.0.1", port: int = 8080):
+def run_proxy(host: str = None, port: int = 8080):
+    host = host or os.environ.get("BASTION_HOST", "127.0.0.1")
     os.chdir(str(WAF_DIR))
     uvicorn.run("bastion.core.proxy:app", host=host, port=port, log_level="warning")
 

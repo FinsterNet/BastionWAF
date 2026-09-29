@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  bastion-waf:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: bastion_waf
+    ports:
+      - "8080:8080" # WAF Reverse Proxy Gateway
+      - "8000:8000" # WAF SOC Security Dashboard
+    environment:
+      - BASTION_HOST=0.0.0.0
+    restart: unless-stopped
