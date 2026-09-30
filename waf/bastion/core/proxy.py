@@ -28,16 +28,6 @@ from database.db import get_enabled_rule_ids, get_sites, init_db, log_event
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config" / "config.json"
-DEFAULT_UPSTREAM = "http://127.0.0.1:3000"
-if CONFIG_PATH.exists():
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-            DEFAULT_UPSTREAM = cfg.get("default_upstream", DEFAULT_UPSTREAM)
-    except Exception:
-        pass
-
 HOP_BY_HOP_HEADERS = {
     "host",
     "content-length",
@@ -55,9 +45,7 @@ HOP_BY_HOP_HEADERS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
-    app.state.client = httpx.AsyncClient(follow_redirects=False, timeout=10.0)
     yield
-    await app.state.client.aclose()
 
 
 app = FastAPI(title="Bastion WAF Reverse Proxy & Challenge Gateway", lifespan=lifespan)
@@ -71,7 +59,7 @@ class CaptchaVerifyPayload(BaseModel):
     trajectory_count: int = 5
 
 
-def resolve_upstream_and_mode(host: str) -> Tuple[str, bool]:
+def resolve_upstream_and_mode(host: str) -> Tuple[Optional[str], bool]:
     """Resolve upstream target and defense mode for the given host."""
     try:
         sites = get_sites()
@@ -83,7 +71,7 @@ def resolve_upstream_and_mode(host: str) -> Tuple[str, bool]:
                 return target, bool(site.get("defense_mode", True))
     except Exception:
         pass
-    return DEFAULT_UPSTREAM, True
+    return None, True
 
 
 @app.post("/__bastion_captcha_verify__")
@@ -261,61 +249,76 @@ async def waf_proxy(request: Request, path: str):
             normalized_payload=scored.normalized_sample,
         )
 
-    # Prepare forwarding headers
-    forward_headers = {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
-    forward_headers["x-forwarded-for"] = client_ip
-    forward_headers["x-forwarded-proto"] = request.url.scheme
-    forward_headers["x-forwarded-host"] = host_header
+    # If an upstream site is configured for this domain, proxy to it
+    if upstream_target:
+        try:
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                url = f"{upstream_target.rstrip('/')}{target_path}"
+                if query_string:
+                    url += f"?{query_string}"
 
-    # Build upstream target URL
-    upstream_url = f"{upstream_target.rstrip('/')}/{path.lstrip('/')}" if path else f"{upstream_target.rstrip('/')}/"
-    if query_string:
-        upstream_url += f"?{query_string}"
+                # Forward headers, excluding hop-by-hop
+                fwd_headers = {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
+                fwd_headers["X-Forwarded-For"] = client_ip
+                fwd_headers["X-Forwarded-Proto"] = request.url.scheme
 
-    client = getattr(app.state, "client", None)
-    own_client = False
-    if client is None:
-        client = httpx.AsyncClient(follow_redirects=False, timeout=10.0)
-        own_client = True
+                resp = await client.request(
+                    method=request.method,
+                    url=url,
+                    headers=fwd_headers,
+                    content=body,
+                    follow_redirects=False,
+                )
 
+                resp_headers = {k: v for k, v in resp.headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
+                return Response(content=resp.content, status_code=resp.status_code, headers=resp_headers)
+        except httpx.ConnectError:
+            return JSONResponse(
+                {
+                    "error": "Upstream unreachable",
+                    "upstream": upstream_target,
+                    "message": f"Could not connect to configured upstream target: {upstream_target}",
+                    "status": 502,
+                },
+                status_code=502,
+            )
+        except Exception as e:
+            return JSONResponse(
+                {
+                    "error": "Upstream proxy error",
+                    "upstream": upstream_target,
+                    "message": str(e),
+                    "status": 502,
+                },
+                status_code=502,
+            )
+
+    # Standalone Inspection Echo Service (Independent WAF Gateway when no upstream site is configured)
     try:
-        upstream_response = await client.request(
-            method=request.method,
-            url=upstream_url,
-            content=body,
-            headers=forward_headers,
-            timeout=10.0,
-        )
-    except httpx.ConnectError:
-        return Response(
-            content='{"error": "502 Bad Gateway", "message": "Upstream target server is unreachable."}',
-            status_code=502,
-            media_type="application/json",
-        )
-    except httpx.TimeoutException:
-        return Response(
-            content='{"error": "504 Gateway Timeout", "message": "Upstream target server timed out."}',
-            status_code=504,
-            media_type="application/json",
-        )
-    except httpx.RequestError as exc:
-        return Response(
-            content=f'{{"error": "502 Bad Gateway", "message": "Upstream error: {str(exc)}"}}',
-            status_code=502,
-            media_type="application/json",
-        )
-    finally:
-        if own_client:
-            await client.aclose()
+        body_text = body.decode("utf-8", errors="replace") if body else None
+    except Exception:
+        body_text = None
 
-    # Process and rewrite upstream headers
-    response_headers = dict(upstream_response.headers)
-    for h in HOP_BY_HOP_HEADERS:
-        response_headers.pop(h, None)
+    filtered_headers = {k: v for k, v in headers.items() if k.lower() not in HOP_BY_HOP_HEADERS}
 
-    return Response(
-        content=upstream_response.content,
-        status_code=upstream_response.status_code,
-        headers=response_headers,
-        media_type=upstream_response.headers.get("content-type"),
-    )
+    echo_payload = {
+        "status": "allowed",
+        "waf": "Bastion Next-Gen WAF Gateway",
+        "mode": "ACTIVE BLOCKING" if defense_active else "BYPASS",
+        "client_ip": client_ip,
+        "method": request.method,
+        "path": target_path,
+        "query_params": dict(request.query_params),
+        "headers": filtered_headers,
+        "body_received": body_text[:1000] if body_text else None,
+        "inspection": {
+            "verdict": "CLEAN",
+            "anomaly_score": scored.total_score,
+            "rule_score": scored.rule_score,
+            "semantic_score": scored.semantic_score,
+            "targets_checked": len(inspection.request.targets),
+            "threat_category": scored.semantic_category or "None",
+            "message": "Request inspected and passed all active semantic and OWASP security rules.",
+        },
+    }
+    return JSONResponse(content=echo_payload, status_code=200)

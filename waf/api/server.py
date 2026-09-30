@@ -29,6 +29,7 @@ from database.db import (
     get_sites,
     get_stats,
     init_db,
+    log_event,
     set_rule_state,
     set_site_defense,
 )
@@ -180,8 +181,29 @@ def simulate_payload(req: PayloadSimulateRequest):
         client_ip=req.client_ip,
     )
     scored = sim_engine.evaluate_scored(inspection.request)
+    blocked = (scored.action.value == "BLOCK")
+    action_str = "403 Blocked" if blocked else ("CAPTCHA Challenged" if scored.action.value == "CHALLENGE" else "200 Allowed")
+    payload_sample = scored.raw_sample or (req.query_string if req.query_string else req.path)
+
+    # Persist simulation to SQLite events table in real time
+    log_event(
+        client_ip=req.client_ip,
+        method=req.method,
+        path=req.path,
+        blocked=blocked,
+        rule_id=scored.primary_rule_id or ("ANOMALY_CHALLENGE" if scored.action.value == "CHALLENGE" else "CLEAN"),
+        reason=scored.primary_reason or "Clean Request Simulation",
+        action=action_str,
+        payload_snippet=payload_sample[:500],
+        rule_score=scored.rule_score,
+        semantic_score=scored.semantic_score,
+        total_score=scored.total_score,
+        raw_payload=scored.raw_sample,
+        normalized_payload=scored.normalized_sample,
+    )
+
     return {
-        "blocked": (scored.action.value == "BLOCK"),
+        "blocked": blocked,
         "action": scored.action.value,
         "rule_id": scored.primary_rule_id,
         "reason": scored.primary_reason,

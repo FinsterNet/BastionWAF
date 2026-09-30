@@ -117,13 +117,8 @@ def init_db():
                 (r[0], r[1], r[2], r[0], r[3]),
             )
 
-        cursor = conn.cursor()
-        cursor.execute("SELECT COUNT(*) FROM protected_sites")
-        count_row = cursor.fetchone()
-        if count_row and count_row[0] == 0:
-            conn.execute(
-                "INSERT INTO protected_sites (id, domain, upstream, ssl_status, defense_mode) VALUES (1, '127.0.0.1:8080', '127.0.0.1:3000', 'Active', 1)"
-            )
+        # Clean up any legacy default site so users start with a clean slate
+        conn.execute("DELETE FROM protected_sites WHERE domain = '127.0.0.1:8080' AND upstream = '127.0.0.1:3000'")
         conn.commit()
 
 
@@ -173,6 +168,138 @@ def log_event(
         conn.commit()
 
 
+def get_threat_category_counts() -> Dict[str, Any]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # 1. Active rule suite breakdown
+        cursor.execute("SELECT category, COUNT(*) FROM waf_rules WHERE enabled = 1 GROUP BY category")
+        rule_counts = {"OWASP Top 10": 0, "API Security": 0, "Bot Protection": 0}
+        for cat, cnt in cursor.fetchall():
+            if cat in rule_counts:
+                rule_counts[cat] = cnt
+
+        # 2. Real attack events from database
+        cursor.execute(
+            """
+            SELECT e.rule_id, e.reason, COUNT(*) as hit_count
+            FROM events e
+            WHERE e.blocked = 1 OR e.action = 'CAPTCHA Challenged'
+            GROUP BY e.rule_id, e.reason
+            """
+        )
+        rows = cursor.fetchall()
+
+        # Build lookup table from waf_rules
+        cursor.execute("SELECT rule_id, category FROM waf_rules")
+        rule_cat_map = {r["rule_id"]: r["category"] for r in cursor.fetchall()}
+
+        threat_counts = {"OWASP Top 10": 0, "API Security": 0, "Bot Protection": 0}
+        for row in rows:
+            rid = row["rule_id"] or ""
+            reason = (row["reason"] or "").lower()
+            cnt = row["hit_count"]
+
+            if rid in rule_cat_map:
+                threat_counts[rule_cat_map[rid]] += cnt
+            elif any(k in reason for k in ("sql", "xss", "traversal", "rce", "command", "ssrf", "ssti", "log4j", "webshell")):
+                threat_counts["OWASP Top 10"] += cnt
+            elif any(k in reason for k in ("api", "graphql", "jwt", "payload", "cors")):
+                threat_counts["API Security"] += cnt
+            elif any(k in reason for k in ("bot", "scanner", "crawler", "captcha", "rate", "flood")):
+                threat_counts["Bot Protection"] += cnt
+            else:
+                threat_counts["OWASP Top 10"] += cnt
+
+        total_threats = sum(threat_counts.values())
+
+        return {
+            "threat_counts": threat_counts,
+            "rule_counts": rule_counts,
+            "total_threats": total_threats,
+        }
+
+
+def get_threat_analytics(limit: int = 5) -> Dict[str, Any]:
+    with get_connection() as conn:
+        cursor = conn.cursor()
+
+        # 1. Top active client IPs (real data, no fake countries)
+        cursor.execute(
+            """
+            SELECT client_ip, COUNT(*) as hit_count,
+                   SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) as blocked_count,
+                   MAX(timestamp) as last_seen
+            FROM events
+            WHERE client_ip != ''
+            GROUP BY client_ip
+            ORDER BY hit_count DESC
+            LIMIT ?
+            """,
+            (limit,),
+        )
+        top_ips = [
+            {
+                "ip": r["client_ip"],
+                "total": r["hit_count"],
+                "blocked": r["blocked_count"],
+                "last_seen": r["last_seen"],
+            }
+            for r in cursor.fetchall()
+        ]
+
+        # 2. Top targeted endpoints
+        cursor.execute(
+            """
+            SELECT path, COUNT(*) as hit_count,
+                   SUM(CASE WHEN blocked = 1 THEN 1 ELSE 0 END) as blocked_count
+            FROM events
+            WHERE path != ''
+            GROUP BY path
+            ORDER BY hit_count DESC
+            LIMIT 4
+            """
+        )
+        top_paths = [
+            {"path": r["path"], "total": r["hit_count"], "blocked": r["blocked_count"]}
+            for r in cursor.fetchall()
+        ]
+
+        # 3. Top triggered defense rules
+        cursor.execute(
+            """
+            SELECT e.rule_id, COALESCE(r.rule_name, e.reason) as rule_name,
+                   COALESCE(r.category, 'OWASP Top 10') as category,
+                   COUNT(*) as trigger_count
+            FROM events e
+            LEFT JOIN waf_rules r ON e.rule_id = r.rule_id
+            WHERE e.blocked = 1 OR e.action = 'CAPTCHA Challenged'
+            GROUP BY e.rule_id
+            ORDER BY trigger_count DESC
+            LIMIT 4
+            """
+        )
+        top_rules = [
+            {
+                "rule_id": r["rule_id"] or "ANOMALY",
+                "name": r["rule_name"],
+                "category": r["category"],
+                "count": r["trigger_count"],
+            }
+            for r in cursor.fetchall()
+        ]
+
+        cursor.execute("SELECT COUNT(DISTINCT client_ip) FROM events")
+        total_unique_ips = cursor.fetchone()[0] or 0
+
+        return {
+            "top_ips": top_ips,
+            "top_paths": top_paths,
+            "top_rules": top_rules,
+            "unique_ips": total_unique_ips,
+        }
+
+
 def get_stats() -> Dict[str, Any]:
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -185,15 +312,36 @@ def get_stats() -> Dict[str, Any]:
         cursor.execute("SELECT COUNT(*) FROM events WHERE action = 'CAPTCHA Challenged'")
         challenged = cursor.fetchone()[0]
 
-        cursor.execute("SELECT COUNT(*) FROM protected_sites")
-        sites = cursor.fetchone()[0]
+        cursor.execute("SELECT blocked FROM events ORDER BY id DESC LIMIT 70")
+        event_rows = cursor.fetchall()
+        clean_pts = []
+        block_pts = []
+        if event_rows:
+            chunk_size = max(1, len(event_rows) // 7)
+            chunks = [event_rows[i:i + chunk_size] for i in range(0, len(event_rows), chunk_size)][:7]
+            for ch in reversed(chunks):
+                bl = sum(1 for x in ch if x["blocked"] == 1)
+                cl = len(ch) - bl
+                clean_pts.append(cl)
+                block_pts.append(bl)
+        while len(clean_pts) < 7:
+            clean_pts.insert(0, 0)
+            block_pts.insert(0, 0)
+
+        categories = get_threat_category_counts()
+        threat_analytics = get_threat_analytics()
 
         return {
             "total_requests": total,
             "blocked_attacks": blocked,
             "challenged_requests": challenged,
-            "protected_domains": sites,
             "latency_ms": 0.38,
+            "categories": categories,
+            "analytics": threat_analytics,
+            "traffic": {
+                "clean": clean_pts,
+                "blocked": block_pts,
+            },
         }
 
 
