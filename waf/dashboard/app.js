@@ -150,9 +150,6 @@ function renderSites(sites) {
         tbody.innerHTML = `
             <tr>
                 <td colspan="5" style="text-align: center; padding: 48px 20px;">
-                    <div style="font-size: 2.2rem; color: var(--accent); margin-bottom: 12px;">
-                        <i class="fa-solid fa-satellite-dish"></i>
-                    </div>
                     <div style="font-size: 1rem; font-weight: 600; color: var(--text-primary); margin-bottom: 6px;">
                         No Protected Sites Configured
                     </div>
@@ -160,7 +157,7 @@ function renderSites(sites) {
                         Bastion WAF is operating as an independent inspection gateway on port 8080. Add a site to proxy clean traffic to an upstream application.
                     </div>
                     <button class="btn btn-primary" onclick="openModal('addSiteModal')">
-                        <i class="fa-solid fa-plus"></i> Add Protected Site
+                        Add Protected Site
                     </button>
                 </td>
             </tr>
@@ -174,18 +171,17 @@ function renderSites(sites) {
             <tr>
                 <td>
                     <div style="display: flex; align-items: center; gap: 8px;">
-                        <i class="fa-solid fa-globe text-accent"></i>
                         <span style="font-family: var(--font-mono); font-weight: 600; color: var(--text-primary);">${escapeHtml(s.domain)}</span>
                     </div>
                 </td>
                 <td>
                     <span style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);">
-                        <i class="fa-solid fa-arrow-right" style="font-size: 0.7rem; margin-right: 4px; color: var(--text-muted);"></i>${escapeHtml(s.upstream)}
+                        ${escapeHtml(s.upstream)}
                     </span>
                 </td>
                 <td>
                     <span class="badge ${isDefenseActive ? 'badge-green' : 'badge-amber'}">
-                        ${isDefenseActive ? '<i class="fa-solid fa-shield"></i> Protected' : '<i class="fa-solid fa-eye"></i> Bypass'}
+                        ${isDefenseActive ? 'Protected' : 'Bypass'}
                     </span>
                 </td>
                 <td>
@@ -196,7 +192,7 @@ function renderSites(sites) {
                 </td>
                 <td style="text-align: right;">
                     <button class="btn btn-outline" style="padding: 4px 10px; font-size: 0.76rem; color: var(--danger); border-color: rgba(229, 72, 77, 0.3);" onclick="deleteSite(${s.id}, '${escapeHtml(s.domain)}')">
-                        <i class="fa-solid fa-trash"></i>
+                        Delete
                     </button>
                 </td>
             </tr>
@@ -330,10 +326,10 @@ async function fetchRules() {
 
         const btns = document.querySelectorAll('.rule-cat-btn');
         if (btns.length >= 4) {
-            btns[0].innerHTML = `<i class="fa-solid fa-layer-group"></i> All (${cachedRules.length})`;
-            btns[1].innerHTML = `<i class="fa-solid fa-shield-halved text-danger"></i> OWASP Top 10 (${countOWASP})`;
-            btns[2].innerHTML = `<i class="fa-solid fa-plug text-accent"></i> API Security (${countAPI})`;
-            btns[3].innerHTML = `<i class="fa-solid fa-robot text-warning"></i> Bot Protection (${countBot})`;
+            btns[0].innerHTML = `All (${cachedRules.length})`;
+            btns[1].innerHTML = `OWASP Top 10 (${countOWASP})`;
+            btns[2].innerHTML = `API Security (${countAPI})`;
+            btns[3].innerHTML = `Bot Protection (${countBot})`;
         }
 
         renderRules();
@@ -380,7 +376,7 @@ async function runSandboxSimulation() {
     const query_string = document.getElementById('sb-query').value;
     const body = document.getElementById('sb-body').value;
 
-    resultBox.innerHTML = `<div style="text-align: center; margin: auto;"><i class="fa-solid fa-spinner fa-spin" style="font-size: 1.6rem; color: var(--accent);"></i><p style="margin-top: 8px; color: var(--text-muted);">Evaluating…</p></div>`;
+    resultBox.innerHTML = `<div style="text-align: center; margin: auto;"><p style="margin-top: 8px; color: var(--accent); font-weight: 600;">Evaluating…</p></div>`;
 
     try {
         const res = await fetch('/api/simulate', {
@@ -391,10 +387,10 @@ async function runSandboxSimulation() {
         const data = await res.json();
 
         const verdictBadge = data.blocked
-            ? '<span class="badge badge-red" style="font-size: 0.85rem;"><i class="fa-solid fa-ban"></i> Blocked</span>'
+            ? '<span class="badge badge-red" style="font-size: 0.85rem;">Blocked</span>'
             : (data.action === 'CHALLENGE'
-                ? '<span class="badge badge-amber" style="font-size: 0.85rem;"><i class="fa-solid fa-puzzle-piece"></i> Challenge</span>'
-                : '<span class="badge badge-green" style="font-size: 0.85rem;"><i class="fa-solid fa-check"></i> Allowed</span>');
+                ? '<span class="badge badge-amber" style="font-size: 0.85rem;">Challenge</span>'
+                : '<span class="badge badge-green" style="font-size: 0.85rem;">Allowed</span>');
 
         const scoreColor = data.total_score >= 5 ? 'var(--danger)' : (data.total_score >= 2.5 ? 'var(--warning)' : 'var(--success)');
 
@@ -448,7 +444,7 @@ function renderThreatAnalytics(analytics) {
 
     const badge = document.getElementById('threat-unique-badge');
     if (badge) {
-        badge.innerHTML = `<i class="fa-solid fa-network-wired"></i> ${analytics.unique_ips || 0} Client IPs`;
+        badge.innerHTML = `${analytics.unique_ips || 0} Client IPs`;
     }
 
     // 1. Top targeted paths
@@ -510,7 +506,6 @@ function renderThreatAnalytics(analytics) {
         } else {
             ipsList.innerHTML = ips.map(i => `
                 <div class="analytics-ip-chip">
-                    <i class="fa-solid fa-laptop text-accent"></i>
                     <code>${i.ip}</code>
                     <span style="color: ${i.blocked > 0 ? 'var(--danger)' : 'var(--text-muted)'}; font-weight: 600;">(${i.total} reqs)</span>
                 </div>
@@ -701,7 +696,7 @@ async function fetchAuditLogs() {
                     <td><span class="badge ${badgeClass}">${l.action}</span></td>
                     <td>
                         <button class="btn btn-outline" style="padding: 2px 7px; font-size: 0.72rem;" onclick="inspectPayload('${encoded}')">
-                            <i class="fa-solid fa-eye"></i>
+                            Inspect
                         </button>
                     </td>
                 </tr>

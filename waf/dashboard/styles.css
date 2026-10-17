@@ -211,37 +211,20 @@ body {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 10px 14px;
+    padding: 10px 16px;
     color: var(--text-secondary);
     text-decoration: none;
     border-radius: var(--radius-md);
-    font-size: 0.85rem;
+    font-size: 0.88rem;
     font-weight: 600;
     cursor: pointer;
     transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     border: 1px solid transparent;
 }
-.nav-item i {
-    width: 28px;
-    height: 28px;
-    border-radius: 8px;
-    background: rgba(15, 21, 53, 0.7);
-    border: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 0.85rem;
-    color: var(--text-secondary);
-    transition: all 0.2s ease;
-}
 .nav-item:hover {
     color: var(--text-primary);
     background: rgba(0, 117, 255, 0.08);
-}
-.nav-item:hover i {
-    color: var(--accent-hover);
-    border-color: rgba(0, 117, 255, 0.3);
 }
 
 .nav-item.active {
@@ -250,12 +233,6 @@ body {
     border: 1px solid rgba(0, 117, 255, 0.4);
     box-shadow: 0 4px 15px rgba(0, 117, 255, 0.25);
     font-weight: 700;
-}
-.nav-item.active i {
-    background: linear-gradient(135deg, #0075FF 0%, #2CD9FF 100%);
-    color: #FFFFFF;
-    border: none;
-    box-shadow: 0 2px 10px rgba(0, 117, 255, 0.4);
 }
 
 .nav-badge {
@@ -373,9 +350,9 @@ body {
 
 /* Theme toggle */
 .theme-toggle {
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    padding: 6px 14px;
+    height: 34px;
+    border-radius: 20px;
     border: 1px solid var(--border);
     background: rgba(15, 21, 53, 0.8);
     color: var(--text-secondary);
@@ -383,18 +360,20 @@ body {
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 0.95rem;
+    font-size: 0.78rem;
+    font-weight: 700;
     transition: all 0.2s;
+    font-family: var(--font-sans);
 }
 .theme-toggle:hover {
     border-color: var(--accent);
     color: #FFFFFF;
     box-shadow: 0 0 10px rgba(0, 117, 255, 0.3);
 }
-.theme-toggle .icon-sun { display: none; }
-.theme-toggle .icon-moon { display: inline; }
-[data-theme="light"] .theme-toggle .icon-sun { display: inline; }
-[data-theme="light"] .theme-toggle .icon-moon { display: none; }
+.theme-toggle .theme-label-dark { display: inline; }
+.theme-toggle .theme-label-light { display: none; }
+[data-theme="light"] .theme-toggle .theme-label-dark { display: none; }
+[data-theme="light"] .theme-toggle .theme-label-light { display: inline; }
 
 .topbar-pill {
     display: inline-flex;
@@ -539,36 +518,9 @@ body {
     text-transform: uppercase;
 }
 
-/* Squircle Glowing Icon Badges */
-.metric-icon {
-    width: 45px;
-    height: 45px;
-    border-radius: 12px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 1.15rem;
-    transition: all 0.25s ease;
-}
-.metric-card.accent .metric-icon {
-    color: #FFFFFF !important;
-    background: linear-gradient(135deg, #0075FF 0%, #2CD9FF 100%);
-    box-shadow: 0 4px 18px rgba(0, 117, 255, 0.45);
-}
-.metric-card.danger .metric-icon {
-    color: #FFFFFF !important;
-    background: linear-gradient(135deg, #E31A1A 0%, #FF5B5B 100%);
-    box-shadow: 0 4px 18px rgba(227, 26, 26, 0.45);
-}
-.metric-card.warning .metric-icon {
-    color: #FFFFFF !important;
-    background: linear-gradient(135deg, #FFB547 0%, #FF9900 100%);
-    box-shadow: 0 4px 18px rgba(255, 181, 71, 0.45);
-}
-.metric-card.purple .metric-icon {
-    color: #FFFFFF !important;
-    background: linear-gradient(135deg, #7928CA 0%, #FF0080 100%);
-    box-shadow: 0 4px 18px rgba(121, 40, 202, 0.45);
+/* Zero Icons Enforcement */
+i, .metric-icon, [class*="fa-"] {
+    display: none !important;
 }
 
 .metric-value {

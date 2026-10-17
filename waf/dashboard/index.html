@@ -7,7 +7,6 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <link rel="stylesheet" href="styles.css">
     <link rel="icon" href="logo.svg" type="image/svg+xml">
@@ -26,24 +25,24 @@
 
         <ul class="nav-list">
             <li class="nav-item active" onclick="switchNav('overview', this)">
-                <i class="fa-solid fa-gauge-high"></i> Overview
+                Overview
             </li>
             <li class="nav-item" onclick="switchNav('sites', this)">
-                <i class="fa-solid fa-globe"></i> Protected Sites
+                Protected Sites
             </li>
             <li class="nav-item" onclick="switchNav('rules', this)">
-                <i class="fa-solid fa-layer-group"></i> Rules
+                Rules
                 <span class="nav-badge" id="rule-count-badge">28</span>
             </li>
             <li class="nav-item" onclick="switchNav('sandbox', this)">
-                <i class="fa-solid fa-flask-vial"></i> Sandbox
+                Sandbox
                 <span class="nav-badge">Live</span>
             </li>
             <li class="nav-item" onclick="switchNav('logs', this)">
-                <i class="fa-solid fa-scroll"></i> Audit Logs
+                Audit Logs
             </li>
             <li class="nav-item" onclick="switchNav('system', this)">
-                <i class="fa-solid fa-microchip"></i> System
+                System
             </li>
         </ul>
 
@@ -63,21 +62,20 @@
         <header class="topbar">
             <div class="topbar-left">
                 <div class="shortcut-hint" onclick="openCmdPalette()">
-                    <i class="fa-solid fa-magnifying-glass"></i>
                     <span>Search…</span>
                     <span class="kbd">⌘K</span>
                 </div>
             </div>
             <div class="topbar-right">
                 <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme">
-                    <i class="fa-solid fa-sun icon-sun"></i>
-                    <i class="fa-solid fa-moon icon-moon"></i>
+                    <span class="theme-label-dark">Dark</span>
+                    <span class="theme-label-light">Light</span>
                 </button>
                 <div class="topbar-pill">
                     <div class="pulse-dot"></div> Active Blocking
                 </div>
                 <button class="btn btn-outline" style="font-size: 0.76rem;" onclick="window.open('http://127.0.0.1:8080', '_blank')">
-                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Proxy :8080
+                    Proxy :8080
                 </button>
             </div>
         </header>
@@ -92,18 +90,16 @@
                     <div class="bento-card metric-card accent">
                         <div class="metric-header">
                             <span>Total Requests</span>
-                            <div class="metric-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
                         </div>
                         <div class="metric-value" id="stat-total-requests">0</div>
                         <div class="metric-footer">
-                            <i class="fa-solid fa-bolt text-accent"></i> Real-time proxy telemetry
+                            Real-time proxy telemetry
                         </div>
                     </div>
 
                     <div class="bento-card metric-card danger">
                         <div class="metric-header">
                             <span>Blocked</span>
-                            <div class="metric-icon"><i class="fa-solid fa-shield-halved"></i></div>
                         </div>
                         <div class="metric-value" id="stat-blocked-attacks" style="color: var(--danger);">0</div>
                         <div class="metric-footer">
@@ -114,18 +110,16 @@
                     <div class="bento-card metric-card warning">
                         <div class="metric-header">
                             <span>Challenges</span>
-                            <div class="metric-icon"><i class="fa-solid fa-puzzle-piece"></i></div>
                         </div>
                         <div class="metric-value" id="stat-challenged-requests" style="color: var(--warning);">0</div>
                         <div class="metric-footer">
-                            <i class="fa-solid fa-robot"></i> CAPTCHA verified
+                            CAPTCHA verified
                         </div>
                     </div>
 
                     <div class="bento-card metric-card purple">
                         <div class="metric-header">
                             <span>Latency</span>
-                            <div class="metric-icon"><i class="fa-solid fa-gauge-high"></i></div>
                         </div>
                         <div class="metric-value" id="stat-latency">0.38 ms</div>
                         <div class="metric-footer">
@@ -137,8 +131,8 @@
                 <div class="analytics-grid">
                     <div class="bento-card">
                         <div class="card-title-bar">
-                            <h2><i class="fa-solid fa-chart-area text-accent"></i> Traffic &amp; Threats</h2>
-                            <span class="badge badge-cyan"><i class="fa-solid fa-circle-dot"></i> Live</span>
+                            <h2>Traffic &amp; Threats</h2>
+                            <span class="badge badge-cyan">Live</span>
                         </div>
                         <div class="chart-wrapper">
                             <canvas id="trafficChart"></canvas>
@@ -147,7 +141,7 @@
 
                     <div class="bento-card">
                         <div class="card-title-bar">
-                            <h2><i class="fa-solid fa-chart-pie text-purple"></i> Threat Categories</h2>
+                            <h2>Threat Categories</h2>
                             <span class="badge badge-purple" id="category-chart-badge">Active Rules</span>
                         </div>
                         <div class="chart-wrapper">
@@ -159,8 +153,8 @@
                 <div class="map-section">
                     <div class="bento-card">
                         <div class="card-title-bar">
-                            <h2><i class="fa-solid fa-crosshairs text-accent"></i> Threat Vectors &amp; Endpoints</h2>
-                            <span class="badge badge-cyan" id="threat-unique-badge"><i class="fa-solid fa-network-wired"></i> 0 Client IPs</span>
+                            <h2>Threat Vectors &amp; Endpoints</h2>
+                            <span class="badge badge-cyan" id="threat-unique-badge">0 Client IPs</span>
                         </div>
                         <div class="threat-analytics-container">
                             <div>
@@ -184,7 +178,7 @@
 
                     <div class="bento-card">
                         <div class="card-title-bar">
-                            <h2><i class="fa-solid fa-bolt text-warning"></i> Incidents</h2>
+                            <h2>Incidents</h2>
                             <button class="btn btn-outline" style="padding: 3px 8px; font-size: 0.72rem;" onclick="fetchAuditLogs()">Refresh</button>
                         </div>
                         <div style="display: flex; flex-direction: column; gap: 6px; max-height: 310px; overflow-y: auto;" id="live-incident-feed">
@@ -200,13 +194,13 @@
                 <div class="bento-card">
                     <div class="card-title-bar">
                         <div>
-                            <h2><i class="fa-solid fa-globe text-accent"></i> Protected Sites & Upstream Routing</h2>
+                            <h2>Protected Sites &amp; Upstream Routing</h2>
                             <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
                                 Configure target hosts and upstreams. When no site is configured, the WAF acts as an independent inspection gateway.
                             </p>
                         </div>
                         <button class="btn btn-primary" onclick="openModal('addSiteModal')">
-                            <i class="fa-solid fa-plus"></i> Add Site
+                            Add Site
                         </button>
                     </div>
 
@@ -241,10 +235,10 @@
                     </div>
 
                     <div style="display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap;">
-                        <button class="btn btn-primary rule-cat-btn" onclick="filterRuleCategory('ALL', this)"><i class="fa-solid fa-layer-group"></i> All (28)</button>
-                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('OWASP Top 10', this)"><i class="fa-solid fa-shield-halved text-danger"></i> OWASP Top 10 (15)</button>
-                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('API Security', this)"><i class="fa-solid fa-plug text-accent"></i> API Security (7)</button>
-                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('Bot Protection', this)"><i class="fa-solid fa-robot text-warning"></i> Bot Protection (6)</button>
+                        <button class="btn btn-primary rule-cat-btn" onclick="filterRuleCategory('ALL', this)">All (28)</button>
+                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('OWASP Top 10', this)">OWASP Top 10 (15)</button>
+                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('API Security', this)">API Security (7)</button>
+                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('Bot Protection', this)">Bot Protection (6)</button>
                     </div>
 
                     <div style="display: flex; flex-direction: column; gap: 8px;" id="rules-container"></div>
@@ -256,7 +250,7 @@
                 <div class="bento-card">
                     <div class="card-title-bar">
                         <div>
-                            <h2><i class="fa-solid fa-flask-vial text-accent"></i> Threat Sandbox</h2>
+                            <h2>Threat Sandbox</h2>
                             <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">Test payloads against Bastion's semantic engine in real time.</p>
                         </div>
                     </div>
@@ -304,13 +298,12 @@
                             </div>
 
                             <button class="btn btn-primary" onclick="runSandboxSimulation()" style="width: 100%; justify-content: center; padding: 10px;">
-                                <i class="fa-solid fa-play"></i> Evaluate
+                                Evaluate
                             </button>
                         </div>
 
                         <div class="sandbox-result-box" id="sandbox-result-container">
                             <div style="color: var(--text-muted); text-align: center; margin: auto;">
-                                <i class="fa-solid fa-microscope" style="font-size: 2rem; margin-bottom: 10px; opacity: 0.4;"></i>
                                 <p>Click Evaluate to inspect the payload.</p>
                             </div>
                         </div>
@@ -322,10 +315,10 @@
             <div id="pane-logs" class="tab-pane">
                 <div class="bento-card">
                     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
-                        <h2><i class="fa-solid fa-scroll text-accent"></i> Audit Logs</h2>
+                        <h2>Audit Logs</h2>
                         <div style="display: flex; gap: 8px;">
-                            <button class="btn btn-outline" onclick="exportLogsCsv()"><i class="fa-solid fa-download"></i> CSV</button>
-                            <button class="btn btn-danger" onclick="clearAuditLogs()"><i class="fa-solid fa-trash"></i> Clear</button>
+                            <button class="btn btn-outline" onclick="exportLogsCsv()">Export CSV</button>
+                            <button class="btn btn-danger" onclick="clearAuditLogs()">Clear</button>
                         </div>
                     </div>
 
@@ -368,7 +361,7 @@
             <div id="pane-system" class="tab-pane">
                 <div class="bento-card">
                     <div class="card-title-bar">
-                        <h2><i class="fa-solid fa-microchip text-accent"></i> System Health</h2>
+                        <h2>System Health</h2>
                     </div>
                     <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr);">
                         <div class="bento-card">
@@ -394,8 +387,8 @@
     <div class="modal-backdrop" id="inspectModal">
         <div class="modal-box" style="max-width: 640px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
-                <h3 style="color: var(--accent);"><i class="fa-solid fa-microscope"></i> Payload Inspector</h3>
-                <button class="btn btn-outline" style="padding: 4px 8px;" onclick="closeModal('inspectModal')"><i class="fa-solid fa-xmark"></i></button>
+                <h3 style="color: var(--accent);">Payload Inspector</h3>
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 1.1rem; line-height: 1;" onclick="closeModal('inspectModal')">&times;</button>
             </div>
             <div style="display: flex; flex-direction: column; gap: 12px;">
                 <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--bg-input); padding: 10px; border-radius: var(--radius-sm); font-size: 0.8rem;">
@@ -420,8 +413,8 @@
     <div class="modal-backdrop" id="addSiteModal" onclick="if(event.target===this) closeModal('addSiteModal')">
         <div class="modal-box" style="max-width: 480px;">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-                <h3 style="color: var(--accent);"><i class="fa-solid fa-globe"></i> Add Protected Site</h3>
-                <button class="btn btn-outline" style="padding: 4px 8px;" onclick="closeModal('addSiteModal')"><i class="fa-solid fa-xmark"></i></button>
+                <h3 style="color: var(--accent);">Add Protected Site</h3>
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 1.1rem; line-height: 1;" onclick="closeModal('addSiteModal')">&times;</button>
             </div>
             <form onsubmit="event.preventDefault(); submitNewSite();" style="display: flex; flex-direction: column; gap: 14px;">
                 <div>
@@ -434,7 +427,7 @@
                 </div>
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
                     <button type="button" class="btn btn-outline" onclick="closeModal('addSiteModal')">Cancel</button>
-                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Site</button>
+                    <button type="submit" class="btn btn-primary">Add Site</button>
                 </div>
             </form>
         </div>
@@ -445,18 +438,18 @@
         <div class="modal-box" style="padding: 16px;">
             <input type="text" id="cmdPaletteInput" placeholder="Type a command…" class="cmd-palette-input" onkeyup="filterCmdPalette(event)">
             <ul class="cmd-list" id="cmdList">
-                <li class="cmd-item" onclick="execCmd('overview')"><span><i class="fa-solid fa-gauge-high" style="margin-right: 8px;"></i> Overview</span> <span class="kbd">1</span></li>
-                <li class="cmd-item" onclick="execCmd('sites')"><span><i class="fa-solid fa-globe" style="margin-right: 8px;"></i> Protected Sites</span> <span class="kbd">2</span></li>
-                <li class="cmd-item" onclick="execCmd('rules')"><span><i class="fa-solid fa-layer-group" style="margin-right: 8px;"></i> Rules</span> <span class="kbd">3</span></li>
-                <li class="cmd-item" onclick="execCmd('sandbox')"><span><i class="fa-solid fa-flask-vial" style="margin-right: 8px;"></i> Sandbox</span> <span class="kbd">4</span></li>
-                <li class="cmd-item" onclick="execCmd('logs')"><span><i class="fa-solid fa-scroll" style="margin-right: 8px;"></i> Audit Logs</span> <span class="kbd">5</span></li>
-                <li class="cmd-item" onclick="execCmd('clear-logs')"><span><i class="fa-solid fa-trash text-danger" style="margin-right: 8px;"></i> Clear Logs</span></li>
+                <li class="cmd-item" onclick="execCmd('overview')"><span>Overview</span> <span class="kbd">1</span></li>
+                <li class="cmd-item" onclick="execCmd('sites')"><span>Protected Sites</span> <span class="kbd">2</span></li>
+                <li class="cmd-item" onclick="execCmd('rules')"><span>Rules</span> <span class="kbd">3</span></li>
+                <li class="cmd-item" onclick="execCmd('sandbox')"><span>Sandbox</span> <span class="kbd">4</span></li>
+                <li class="cmd-item" onclick="execCmd('logs')"><span>Audit Logs</span> <span class="kbd">5</span></li>
+                <li class="cmd-item" onclick="execCmd('clear-logs')"><span class="text-danger">Clear Logs</span></li>
             </ul>
         </div>
     </div>
 
     <!-- Toast -->
-    <div class="toast" id="toast"><i class="fa-solid fa-circle-check text-success"></i> <span id="toast-msg">Done</span></div>
+    <div class="toast" id="toast"><span id="toast-msg">Done</span></div>
 
     <script src="app.js"></script>
 </body>
