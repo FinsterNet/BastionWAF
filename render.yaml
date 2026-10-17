@@ -12,7 +12,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /healthz
-    autoDeployTrigger: on
+    autoDeployTrigger: commit
     envVars:
       - key: PORT
         value: 10000
