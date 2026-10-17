@@ -5,7 +5,7 @@
 
 services:
   - type: web
-    name: bastion-waf
+    name: finsternet-waf
     runtime: docker
     plan: free
     region: oregon
