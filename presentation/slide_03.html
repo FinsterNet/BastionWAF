@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cols-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin-top: 20px;
+}
+.target-col {
+  background: #EEF7F2;
+  border-top: 6px solid #2F855A;
+  border-radius: 14px;
+  padding: 36px 32px;
+  display: flex;
+  flex-direction: column;
+  height: 480px;
+}
+.col-num {
+  font-size: 16px;
+  font-weight: 700;
+  color: #2F855A;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 16px;
+}
+.col-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 18px;
+  line-height: 1.3;
+}
+.col-desc {
+  font-size: 18px;
+  color: #4A5568;
+  line-height: 1.6;
+}
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">The Target Market: The "Missing Middle"</h1>
+    <p class="slide-subtitle">Bastion protects the critical tier of institutions that handle real user data locally but cannot access foreign firewalls.</p>
+  </div>
+  <div class="cols-grid">
+    <div class="target-col">
+      <div class="col-num">Sector 01</div>
+      <div class="col-title">Campus Networks & Departmental Services</div>
+      <div class="col-desc">BiT student portals, grading platforms, and faculty research tools facing 24/7 automated network scanning without dedicated security staff or enterprise security operations centers.</div>
+    </div>
+    <div class="target-col">
+      <div class="col-num">Sector 02</div>
+      <div class="col-title">Regional SMEs & Software Houses</div>
+      <div class="col-desc">Local tech startups, e-commerce shops, and private clinics processing customer transactions entirely in Ethiopian Birr (ETB) and needing a turnkey, zero-headache perimeter firewall.</div>
+    </div>
+    <div class="target-col">
+      <div class="col-num">Sector 03</div>
+      <div class="col-title">Public Regional Platforms</div>
+      <div class="col-desc">Municipal and educational bureaus legally or policy-bound to keep all traffic data, inspection telemetry, and audit logs strictly on physical, on-premises local servers within national borders.</div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>3</span>
+  </div>
+</body>
+</html>

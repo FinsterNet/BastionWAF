@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layout-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 36px;
+  margin-top: 10px;
+  align-items: center;
+}
+.preview-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.img-frame {
+  background: #1A1A1A;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+  border: 1px solid #E2E8F0;
+}
+.img-frame img {
+  width: 100%;
+  display: block;
+}
+.features-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.feature-card {
+  background: #EEF7F2;
+  border-radius: 12px;
+  padding: 18px 24px;
+}
+.f-title {
+  font-size: 19px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.f-dot { width: 8px; height: 8px; border-radius: 50%; background: #2F855A; }
+.f-desc { font-size: 15px; color: #4A5568; line-height: 1.45; }
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">Operational Telemetry & Management Dashboard</h1>
+    <p class="slide-subtitle">A self-contained web console replacing terminal configuration with intuitive real-time visibility.</p>
+  </div>
+  <div class="layout-split">
+    <div class="preview-stack">
+      <div class="img-frame">
+        <img src="extracted_img-000.png" alt="Live Traffic View">
+      </div>
+      <div class="img-frame">
+        <img src="extracted_img-001.png" alt="Rule Engine">
+      </div>
+    </div>
+    <div class="features-list">
+      <div class="feature-card">
+        <div class="f-title"><div class="f-dot"></div> Real-Time SOC Telemetry</div>
+        <div class="f-desc">Visualizes live traffic throughput, mitigation percentages, challenge distributions, and host system health vitals (CPU/RAM/Uptime).</div>
+      </div>
+      <div class="feature-card">
+        <div class="f-title"><div class="f-dot"></div> Authentic Threat Analytics</div>
+        <div class="f-desc">Tracks real database-persisted attack vectors (targeted URL endpoints, triggered rule IDs, source IP frequencies) without fake external cloud lookups.</div>
+      </div>
+      <div class="feature-card">
+        <div class="f-title"><div class="f-dot"></div> One-Click Rule Management</div>
+        <div class="f-desc">Toggle any of the 28 security rules on/off dynamically in memory via the browser with zero server restarts required.</div>
+      </div>
+      <div class="feature-card">
+        <div class="f-title"><div class="f-dot"></div> Interactive Threat Sandbox</div>
+        <div class="f-desc">Test custom request payloads and inspect AST scores before deploying rules into live production traffic.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>9</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  margin-top: 10px;
+}
+.step-card {
+  background: #EEF7F2;
+  border-radius: 12px;
+  padding: 22px 28px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.step-badge {
+  width: 100px;
+  height: 54px;
+  background: #2F855A;
+  color: #FFFFFF;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 18px;
+  flex-shrink: 0;
+  letter-spacing: 0.05em;
+}
+.step-content { flex: 1; }
+.step-name { font-size: 22px; font-weight: 700; color: #1A1A1A; margin-bottom: 4px; }
+.step-desc { font-size: 17px; color: #4A5568; line-height: 1.45; }
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">Core Defense Pipeline (How It Works)</h1>
+    <p class="slide-subtitle">A multi-stage inspection flow engineered for deep payload de-obfuscation and sub-millisecond execution.</p>
+  </div>
+  <div class="steps-list">
+    <div class="step-card">
+      <div class="step-badge">STEP 1</div>
+      <div class="step-content">
+        <div class="step-name">Multi-Pass Normalization Layer</div>
+        <div class="step-desc">Recursively resolves multi-stage URL encoding, HTML entities, Unicode NFKC homoglyphs, and comment injection techniques (e.g. <code>UNI/**/ON</code>) before any rule evaluation.</div>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-badge">STEP 2</div>
+      <div class="step-content">
+        <div class="step-name">Hybrid Inspection Suite</div>
+        <div class="step-desc">Dual raw and canonical payload representations evaluated concurrently against 28 Core Rule Set (CRS) signatures across OWASP Top 10, API, and Bot threats.</div>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-badge">STEP 3</div>
+      <div class="step-content">
+        <div class="step-name">Context-Aware Semantic AST Lexer</div>
+        <div class="step-desc">Parses structural grammar tokens to evaluate true execution intent and boolean tautologies, rather than relying on flawed blind keyword matching.</div>
+      </div>
+    </div>
+    <div class="step-card">
+      <div class="step-badge">STEP 4</div>
+      <div class="step-content">
+        <div class="step-name">Fail-Safe Operation Engine</div>
+        <div class="step-desc">Configurable Passive Monitor (Bypass) Mode for safe staging, alongside a Fail-Open safety switch to guarantee continuous application availability.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>5</span>
+  </div>
+</body>
+</html>

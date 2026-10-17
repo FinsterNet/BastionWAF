@@ -1,0 +1,48 @@
+# ==============================================================================
+# BastionWAF Declarative Configuration File (bastion.yaml)
+# ==============================================================================
+
+# Core WAF Proxy Server Settings
+server:
+  host: "0.0.0.0"
+  port: 8080
+  timeout_seconds: 10.0
+
+# OpenSearch SIEM / Security Telemetry Integration
+opensearch:
+  enabled: true
+  hosts:
+    - "http://127.0.0.1:9200"
+  index_prefix: "bastion-waf-events"
+  ssl_verify: false
+  auth:
+    username: ""
+    password: ""
+  buffer:
+    batch_size: 50
+    flush_interval_seconds: 2.0
+    fallback_log_path: "logs/bastion_events.jsonl"
+
+# Protected Web Sites & Reverse Proxy Routing
+sites:
+  - domain: "localhost"
+    upstream: "http://127.0.0.1:3000"
+    defense_mode: true
+  - domain: "127.0.0.1"
+    upstream: "http://127.0.0.1:3000"
+    defense_mode: true
+  - domain: "example.local"
+    upstream: "http://10.0.0.5:80"
+    defense_mode: true
+
+# Anomaly Scoring & Policy Thresholds
+policy:
+  block_threshold: 5.0
+  challenge_threshold: 2.5
+  shadow_mode: false
+  rule_weight: 0.6
+  semantic_weight: 0.4
+
+# Security Rule Overrides (List Rule IDs to disable if needed)
+rules:
+  disabled_rules: []

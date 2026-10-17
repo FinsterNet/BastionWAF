@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pricing-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 32px;
+  margin-top: 10px;
+}
+.price-card {
+  background: #EEF7F2;
+  border-radius: 14px;
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  height: 490px;
+}
+.p-tag {
+  font-size: 15px;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #2F855A;
+  letter-spacing: 0.08em;
+  margin-bottom: 12px;
+}
+.p-name { font-size: 24px; font-weight: 700; color: #1A1A1A; margin-bottom: 18px; }
+.p-items {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  font-size: 16px;
+  color: #4A5568;
+}
+.p-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  line-height: 1.45;
+}
+.bullet { color: #2F855A; font-weight: 700; flex-shrink: 0; }
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">Business Model & Revenue Strategy</h1>
+    <p class="slide-subtitle">Sustainable domestic monetization billed via local mobile money (Telebirr, CBE Birr).</p>
+  </div>
+  <div class="pricing-grid">
+    <div class="price-card">
+      <div class="p-tag">Channel 01</div>
+      <div class="p-name">Tiered Subscriptions (SaaS)</div>
+      <div class="p-items">
+        <div class="p-item"><span class="bullet">•</span><span><strong>Academic Tier (0 ETB / Free):</strong> Free for student projects & campus research labs.</span></div>
+        <div class="p-item"><span class="bullet">•</span><span><strong>Commercial SME Tier (1,500 – 2,500 ETB / mo):</strong> Automated rule updates, managed proxy routing, and direct alerts.</span></div>
+        <div class="p-item"><span class="bullet">•</span><span><strong>Agency Multi-Domain Tier (4,000 – 6,000 ETB / mo):</strong> Up to 10 client domains managed in a unified console.</span></div>
+      </div>
+    </div>
+    <div class="price-card">
+      <div class="p-tag">Channel 02</div>
+      <div class="p-name">On-Premise Enterprise</div>
+      <div class="p-items">
+        <div class="p-item"><span class="bullet">•</span><span><strong>Self-Hosted Enterprise License (20,000 – 35,000 ETB / yr):</strong> For regional banks and public municipal offices requiring air-gapped data residency.</span></div>
+        <div class="p-item"><span class="bullet">•</span><span><strong>Turnkey Appliance Delivery (30,000 – 50,000 ETB one-time):</strong> Pre-hardened mini-PC appliance delivered for direct server-room deployment.</span></div>
+      </div>
+    </div>
+    <div class="price-card">
+      <div class="p-tag">Channel 03</div>
+      <div class="p-name">Domestic Partnerships</div>
+      <div class="p-items">
+        <div class="p-item"><span class="bullet">•</span><span><strong>Hosting Provider Add-on (300 – 500 ETB / domain / mo):</strong> Wholesale integration with domestic hosting providers during checkout.</span></div>
+        <div class="p-item"><span class="bullet">•</span><span><strong>Software Agency Bundling:</strong> Regional software houses pre-installing Bastion as the baseline security layer on custom client portals.</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>11</span>
+  </div>
+</body>
+</html>

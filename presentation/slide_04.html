@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.layout-split {
+  display: grid;
+  grid-template-columns: 1.15fr 0.85fr;
+  gap: 40px;
+  margin-top: 10px;
+  align-items: stretch;
+}
+.pillars-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.pillar-card {
+  background: #EEF7F2;
+  border-radius: 12px;
+  padding: 22px 26px;
+}
+.p-head {
+  font-size: 20px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.dot { width: 10px; height: 10px; border-radius: 50%; background: #2F855A; }
+.p-text { font-size: 16px; color: #4A5568; line-height: 1.5; }
+.diag-card {
+  background: #F8FAFC;
+  border: 2px dashed #CBD5E0;
+  border-radius: 14px;
+  padding: 30px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  text-align: center;
+}
+.diag-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+.flow-box {
+  background: #FFFFFF;
+  border: 1.5px solid #E2E8F0;
+  border-radius: 10px;
+  padding: 16px;
+  font-weight: 700;
+  font-size: 17px;
+  color: #1A1A1A;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+.flow-arrow { font-size: 20px; color: #2F855A; }
+.flow-highlight { background: #EEF7F2; border-color: #2F855A; color: #2F855A; }
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">The Solution: Bastion WAF Overview</h1>
+    <p class="slide-subtitle">A high-throughput, self-hosted inline reverse proxy providing sub-millisecond perimeter protection.</p>
+  </div>
+  <div class="layout-split">
+    <div class="pillars-list">
+      <div class="pillar-card">
+        <div class="p-head"><div class="dot"></div> Inline Reverse-Proxy Gateway</div>
+        <div class="p-text">Intercepts incoming HTTP/HTTPS traffic at the network edge before it can touch backend databases or application logic.</div>
+      </div>
+      <div class="pillar-card">
+        <div class="p-head"><div class="dot"></div> Runs on Standard Commodity Hardware</div>
+        <div class="p-text">Engineered for high throughput on standard quad-core desktop PCs without demanding expensive specialized hardware.</div>
+      </div>
+      <div class="pillar-card">
+        <div class="p-head"><div class="dot"></div> Autonomous Protection Suite</div>
+        <div class="p-text">28 active defense rules protecting across OWASP Top 10, API Security, and Automated Bot Scanners.</div>
+      </div>
+      <div class="pillar-card">
+        <div class="p-head"><div class="dot"></div> 100% Domestic Billing</div>
+        <div class="p-text">Fully commercialized in Ethiopian Birr (ETB) with native Telebirr and CBE Birr payment integrations.</div>
+      </div>
+    </div>
+    <div class="diag-card">
+      <div class="diag-flow">
+        <div class="flow-box">Public Web Clients / Untrusted Internet</div>
+        <div class="flow-arrow">▼</div>
+        <div class="flow-box flow-highlight">Bastion WAF Gateway (:8080)<br><span style="font-size: 14px; font-weight: 400; color: #4A5568;">Normalization • AST Lexer • 3-Tier Policy</span></div>
+        <div class="flow-arrow">▼</div>
+        <div class="flow-box">Origin Web Application / Database Backend</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>4</span>
+  </div>
+</body>
+</html>

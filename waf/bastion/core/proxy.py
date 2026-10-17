@@ -13,6 +13,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel
 
+from .config import get_config
 from .engine import Engine
 from .inspector import inspect_request
 from .scorer import ActionDecision
@@ -24,6 +25,8 @@ from ..challenge.captcha import (
 )
 from ..challenge.evaluator import RiskDecision, RiskEvaluator
 from ..challenge.page import render_captcha_page
+from ..telemetry.ecs_formatter import format_ecs_event
+from ..telemetry.opensearch_client import get_telemetry_logger
 from database.db import get_enabled_rule_ids, get_sites, init_db, log_event
 
 logger = logging.getLogger(__name__)
@@ -45,7 +48,10 @@ HOP_BY_HOP_HEADERS = {
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    telemetry = get_telemetry_logger()
+    await telemetry.start()
     yield
+    await telemetry.stop()
 
 
 app = FastAPI(title="Bastion WAF Reverse Proxy & Challenge Gateway", lifespan=lifespan)
@@ -60,7 +66,10 @@ class CaptchaVerifyPayload(BaseModel):
 
 
 def resolve_upstream_and_mode(host: str) -> Tuple[Optional[str], bool]:
-    """Resolve upstream target and defense mode for the given host."""
+    """Resolve upstream target and defense mode for the given host from config with DB fallback."""
+    target, defense = get_config().resolve_upstream(host)
+    if target:
+        return target, defense
     try:
         sites = get_sites()
         for site in sites:
@@ -99,6 +108,19 @@ async def verify_captcha_endpoint(request: Request, payload: CaptchaVerifyPayloa
             action="Challenge Failed",
             payload_snippet=f"Offset: {payload.user_x}, Duration: {payload.duration_ms}ms",
         )
+        get_telemetry_logger().enqueue(
+            format_ecs_event(
+                client_ip=client_ip,
+                method="POST",
+                path="/__bastion_captcha_verify__",
+                status_code=400,
+                blocked=True,
+                action="Challenge Failed",
+                rule_id="CHALLENGE_FAILED",
+                reason=f"CAPTCHA verification failed: {msg}",
+                raw_payload=f"Offset: {payload.user_x}, Duration: {payload.duration_ms}ms",
+            )
+        )
         return JSONResponse(status_code=400, content={"status": "error", "message": msg})
 
     # Issue clearance cookie
@@ -114,6 +136,19 @@ async def verify_captcha_endpoint(request: Request, payload: CaptchaVerifyPayloa
         action="Clearance Granted",
         payload_snippet=f"Valid slide duration: {payload.duration_ms:.0f}ms",
     )
+    get_telemetry_logger().enqueue(
+        format_ecs_event(
+            client_ip=client_ip,
+            method="POST",
+            path="/__bastion_captcha_verify__",
+            status_code=200,
+            blocked=False,
+            action="Clearance Granted",
+            rule_id="CHALLENGE_SOLVED",
+            reason="Interactive Slider CAPTCHA solved by human user",
+            raw_payload=f"Valid slide duration: {payload.duration_ms:.0f}ms",
+        )
+    )
 
     res = JSONResponse(content={"status": "ok", "message": "Verification successful"})
     res.set_cookie(
@@ -125,6 +160,16 @@ async def verify_captcha_endpoint(request: Request, payload: CaptchaVerifyPayloa
         samesite="lax",
     )
     return res
+
+
+@app.get("/healthz")
+@app.get("/health")
+async def health_check():
+    """Cloud deployment health check probe endpoint for Render, Kubernetes, and load balancers."""
+    return JSONResponse(
+        status_code=200,
+        content={"status": "healthy", "service": "bastion-waf", "mode": "active"},
+    )
 
 
 @app.api_route("/{path:path}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"])
@@ -153,8 +198,14 @@ async def waf_proxy(request: Request, path: str):
         client_ip=client_ip,
     )
 
+    # Combine DB rules with bastion.yaml disabled rules
+    disabled_rules = set(get_config().get_disabled_rules())
     try:
-        enabled_rules = get_enabled_rule_ids()
+        db_rules = get_enabled_rule_ids()
+        if db_rules is not None:
+            enabled_rules = [r for r in db_rules if r not in disabled_rules]
+        else:
+            enabled_rules = None
     except Exception:
         enabled_rules = None
 
@@ -173,6 +224,29 @@ async def waf_proxy(request: Request, path: str):
 
     payload_sample = scored.raw_sample or (query_string if query_string else target_path)
 
+    # Common telemetry helper
+    def send_telemetry(status_code: int, blocked: bool, action: str, rule_id: str, reason: str):
+        get_telemetry_logger().enqueue(
+            format_ecs_event(
+                client_ip=client_ip,
+                method=request.method,
+                path=target_path,
+                query_string=query_string,
+                host=host_header,
+                status_code=status_code,
+                blocked=blocked,
+                action=action,
+                rule_id=rule_id,
+                reason=reason,
+                rule_score=scored.rule_score,
+                semantic_score=scored.semantic_score,
+                total_score=scored.total_score,
+                raw_payload=scored.raw_sample,
+                normalized_payload=scored.normalized_sample,
+                user_agent=headers.get("user-agent", ""),
+            )
+        )
+
     # If defense mode is disabled for this site (Bypass Mode), allow all
     if not defense_active:
         log_event(
@@ -190,6 +264,7 @@ async def waf_proxy(request: Request, path: str):
             raw_payload=scored.raw_sample,
             normalized_payload=scored.normalized_sample,
         )
+        send_telemetry(200, False, "Bypassed Allowed", scored.primary_rule_id, "Bypass Mode Active")
     elif effective_action == ActionDecision.BLOCK:
         # Tier 1: Confirmed Threat / High Anomaly -> HTTP 403 Forbidden
         log_event(
@@ -207,6 +282,7 @@ async def waf_proxy(request: Request, path: str):
             raw_payload=scored.raw_sample,
             normalized_payload=scored.normalized_sample,
         )
+        send_telemetry(403, True, "403 Blocked", scored.primary_rule_id, scored.primary_reason)
         return Response(
             content=f'{{"blocked": true, "rule": "{scored.primary_rule_id}", "reason": "{scored.primary_reason}", "total_score": {scored.total_score}, "rule_score": {scored.rule_score}, "semantic_score": {scored.semantic_score}, "status": 403}}',
             status_code=403,
@@ -229,6 +305,7 @@ async def waf_proxy(request: Request, path: str):
             raw_payload=scored.raw_sample,
             normalized_payload=scored.normalized_sample,
         )
+        send_telemetry(200, False, "CAPTCHA Challenged", scored.primary_rule_id or "ANOMALY_CHALLENGE", scored.primary_reason)
         captcha_html = render_captcha_page(client_ip=client_ip, target_path=target_path, reason=scored.primary_reason)
         return HTMLResponse(content=captcha_html, status_code=200)
     else:
@@ -248,6 +325,7 @@ async def waf_proxy(request: Request, path: str):
             raw_payload=scored.raw_sample,
             normalized_payload=scored.normalized_sample,
         )
+        send_telemetry(200, False, "200 Allowed", "", "Clean Request")
 
     # If an upstream site is configured for this domain, proxy to it
     if upstream_target:

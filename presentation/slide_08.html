@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.metrics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 32px;
+  margin-top: 10px;
+}
+.metric-box {
+  background: #EEF7F2;
+  border-radius: 14px;
+  padding: 36px 40px;
+  display: flex;
+  flex-direction: column;
+}
+.m-value {
+  font-size: 58px;
+  font-weight: 800;
+  color: #2F855A;
+  margin-bottom: 8px;
+  letter-spacing: -0.02em;
+}
+.m-label {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 8px;
+}
+.m-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.5;
+}
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">Current MVP Status & Benchmark Results</h1>
+    <p class="slide-subtitle">Empirical performance metrics measured on standard commodity desktop hardware.</p>
+  </div>
+  <div class="metrics-grid">
+    <div class="metric-box">
+      <div class="m-value">~0.42 ms</div>
+      <div class="m-label">Average Inspection Latency</div>
+      <div class="m-desc">Verified locally across 10,000+ concurrent mixed HTTP requests (clean traffic, nested SQLi, encoded XSS, path traversal).</div>
+    </div>
+    <div class="metric-box">
+      <div class="m-value">&lt; 140 MB</div>
+      <div class="m-label">RAM Footprint</div>
+      <div class="m-desc">Highly optimized async engine running on standard Linux x86_64 commodity hardware alongside the telemetry server.</div>
+    </div>
+    <div class="metric-box">
+      <div class="m-value">103 / 103</div>
+      <div class="m-label">Passing Automated Tests</div>
+      <div class="m-desc">Full test suite verifying zero false negatives across all 28 active OWASP, API, and bot detection rules.</div>
+    </div>
+    <div class="metric-box">
+      <div class="m-value">1,000 RPS</div>
+      <div class="m-label">Incubation Target Metric</div>
+      <div class="m-desc">Scaling to sustain 1,000 Requests Per Second with a 99th-percentile latency under 1.5 ms on a standalone commodity desktop PC.</div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>8</span>
+  </div>
+</body>
+</html>

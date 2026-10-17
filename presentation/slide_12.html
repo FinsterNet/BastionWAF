@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.roadmap-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-top: 10px;
+}
+.roadmap-card {
+  background: #EEF7F2;
+  border-radius: 12px;
+  padding: 22px 28px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.r-badge {
+  width: 120px;
+  height: 52px;
+  background: #2F855A;
+  color: #FFFFFF;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 16px;
+  flex-shrink: 0;
+  letter-spacing: 0.04em;
+}
+.r-content { flex: 1; }
+.r-name { font-size: 21px; font-weight: 700; color: #1A1A1A; margin-bottom: 4px; }
+.r-desc { font-size: 16px; color: #4A5568; line-height: 1.45; }
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">Phased Development Roadmap</h1>
+    <p class="slide-subtitle">Clear engineering milestones to advance from a working prototype to an enterprise appliance.</p>
+  </div>
+  <div class="roadmap-list">
+    <div class="roadmap-card">
+      <div class="r-badge">STAGE 1</div>
+      <div class="r-content">
+        <div class="r-name">Current Working Prototype (Completed)</div>
+        <div class="r-desc">Fast reverse proxy, sub-millisecond AST parser, 28-rule CRS suite, Slider CAPTCHA, and centralized dashboard.</div>
+      </div>
+    </div>
+    <div class="roadmap-card">
+      <div class="r-badge">STAGE 2</div>
+      <div class="r-content">
+        <div class="r-name">Months 1–3 @ BiTec: Traffic Baselining &amp; Rate Limiting</div>
+        <div class="r-desc">Implementing sliding-window rate limiting, client connection frequency tracking, and behavioral scanning baselining.</div>
+      </div>
+    </div>
+    <div class="roadmap-card">
+      <div class="r-badge">STAGE 3</div>
+      <div class="r-content">
+        <div class="r-name">Months 4–6 @ BiTec: Zero-Day Anomaly Detection</div>
+        <div class="r-desc">Adding lightweight local classification models to recognize polymorphic injection mutations and automated parameter fuzzing.</div>
+      </div>
+    </div>
+    <div class="roadmap-card">
+      <div class="r-badge">STAGE 4</div>
+      <div class="r-content">
+        <div class="r-name">Months 7–9 @ BiTec: Plain-Language AI Summaries</div>
+        <div class="r-desc">Automated incident reporting that converts raw request dumps and regex logs into plain-language incident explanations and patch advice.</div>
+      </div>
+    </div>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>12</span>
+  </div>
+</body>
+</html>

@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head><style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  width: 1920px;
+  height: 1080px;
+  background-color: #FFFFFF;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  color: #1A1A1A;
+  padding: 80px 120px 70px 120px;
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.slide-header {
+  margin-bottom: 36px;
+}
+
+.slide-title {
+  font-size: 54px;
+  font-weight: 800;
+  letter-spacing: -0.015em;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+}
+
+.slide-subtitle {
+  font-size: 24px;
+  font-weight: 400;
+  color: #4A5568;
+  letter-spacing: -0.005em;
+  line-height: 1.4;
+  max-width: 1400px;
+}
+
+.card {
+  background-color: #EEF7F2;
+  border-radius: 14px;
+  padding: 28px 32px;
+  transition: transform 0.2s ease;
+}
+
+.card-title {
+  font-size: 22px;
+  font-weight: 700;
+  color: #1A1A1A;
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-desc {
+  font-size: 17px;
+  color: #4A5568;
+  line-height: 1.55;
+}
+
+.footer {
+  position: absolute;
+  bottom: 40px;
+  left: 120px;
+  right: 120px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 16px;
+  color: #718096;
+  border-top: 1px solid #EDF2F7;
+  padding-top: 18px;
+}
+
+.footer-brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.table-wrap {
+  margin-top: 14px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 1px solid #E2E8F0;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.02);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+th {
+  background: #1A1A1A;
+  color: #FFFFFF;
+  padding: 18px 24px;
+  font-size: 17px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+th.highlight {
+  background: #2F855A;
+}
+td {
+  padding: 16px 24px;
+  font-size: 16px;
+  color: #4A5568;
+  border-bottom: 1px solid #EDF2F7;
+}
+tr:nth-child(even) td {
+  background: #F8FAFC;
+}
+td.highlight-col {
+  background: #EEF7F2 !important;
+  font-weight: 700;
+  color: #1A1A1A;
+}
+</style></head>
+<body>
+  <div class="slide-header">
+    <h1 class="slide-title">Competitive Advantage</h1>
+    <p class="slide-subtitle">Comparing Bastion against international cloud providers and legacy open-source tools.</p>
+  </div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>Evaluation Feature</th>
+          <th>Cloudflare / AWS WAF</th>
+          <th>ModSecurity / Coraza</th>
+          <th class="highlight">Bastion WAF (Proposed)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Billing & Currency</strong></td>
+          <td>Monthly USD (Credit Card)</td>
+          <td>Free (High Labor Cost)</td>
+          <td class="highlight-col">100% Ethiopian Birr (Telebirr / CBE)</td>
+        </tr>
+        <tr>
+          <td><strong>Data Residency</strong></td>
+          <td>Overseas Cloud Servers</td>
+          <td>Local / Self-Hosted</td>
+          <td class="highlight-col">Strictly On-Premises Sovereignty</td>
+        </tr>
+        <tr>
+          <td><strong>Management Interface</strong></td>
+          <td>Cloud Console</td>
+          <td>Command-Line Files (.conf)</td>
+          <td class="highlight-col">Interactive Real-Time Web UI</td>
+        </tr>
+        <tr>
+          <td><strong>Detection Engine</strong></td>
+          <td>Proprietary Heuristics</td>
+          <td>Static Regex Matching</td>
+          <td class="highlight-col">Semantic AST Lexer + CRS Rules</td>
+        </tr>
+        <tr>
+          <td><strong>Bot Challenge</strong></td>
+          <td>Cloudflare Turnstile</td>
+          <td>Basic Rate Limits</td>
+          <td class="highlight-col">Self-Hosted Adaptive Slider CAPTCHA</td>
+        </tr>
+        <tr>
+          <td><strong>Hardware Overhead</strong></td>
+          <td>Cloud Infrastructure</td>
+          <td>Moderate / High CPU Spikes</td>
+          <td class="highlight-col">Sub-millisecond on Commodity PCs</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="footer">
+    <span class="footer-brand">Bahir Dar Institute of Technology (BiT) • BiTec</span>
+    <span>10</span>
+  </div>
+</body>
+</html>

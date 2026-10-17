@@ -1,0 +1,24 @@
+# ==============================================================================
+# Render Blueprint Specification (render.yaml)
+# Docs: https://render.com/docs/blueprint-spec
+# ==============================================================================
+
+services:
+  - type: web
+    name: bastion-waf
+    runtime: docker
+    plan: free
+    region: oregon
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /healthz
+    autoDeployTrigger: on
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: BASTION_HOST
+        value: 0.0.0.0
+      - key: BASTION_CONFIG
+        value: /app/waf/config/bastion.yaml
+      - key: PYTHONUNBUFFERED
+        value: "1"

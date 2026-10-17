@@ -1,10 +1,10 @@
 """
-Bastion WAF Multi-Service Orchestrator Launcher.
-Manages WAF Reverse Proxy (Port 8080) and Management SOC Dashboard API (Port 8000).
+BastionWAF Enterprise Security Gateway Launcher.
+Runs the high-performance WAF Reverse Proxy with asynchronous OpenSearch SIEM telemetry.
+Configuration loaded from bastion.yaml.
 """
 
 import argparse
-from multiprocessing import Process
 import os
 from pathlib import Path
 import signal
@@ -19,6 +19,8 @@ WAF_DIR = Path(__file__).resolve().parent
 if str(WAF_DIR) not in sys.path:
     sys.path.insert(0, str(WAF_DIR))
 
+from bastion.core.config import get_config
+
 
 def free_port(port: int):
     """Ensure port is available by clearing any stale process holding it."""
@@ -32,75 +34,42 @@ def free_port(port: int):
         pass
 
 
-def run_dashboard(host: str = None, port: int = 8000):
-    host = host or os.environ.get("BASTION_HOST", "127.0.0.1")
-    os.chdir(str(WAF_DIR))
-    uvicorn.run("api.server:app", host=host, port=port, log_level="warning")
-
-
-def run_proxy(host: str = None, port: int = 8080):
-    host = host or os.environ.get("BASTION_HOST", "127.0.0.1")
-    os.chdir(str(WAF_DIR))
-    uvicorn.run("bastion.core.proxy:app", host=host, port=port, log_level="warning")
-
-
 def main():
-    parser = argparse.ArgumentParser(description="Bastion WAF System Launcher")
-    parser.add_argument(
-        "--service",
-        choices=["all", "dashboard", "proxy"],
-        default="all",
-        help="Service to start (default: all)",
-    )
+    cfg = get_config()
+    env_port = int(os.environ.get("PORT", cfg.server.port))
+    env_host = os.environ.get("BASTION_HOST", cfg.server.host)
+
+    parser = argparse.ArgumentParser(description="Bastion WAF Gateway")
+    parser.add_argument("--host", default=env_host, help="Bind host (default from bastion.yaml or BASTION_HOST)")
+    parser.add_argument("--port", type=int, default=env_port, help="Bind port (default from bastion.yaml or PORT)")
     args = parser.parse_args()
 
-    if args.service == "dashboard":
-        free_port(8000)
-        run_dashboard()
-    elif args.service == "proxy":
-        free_port(8080)
-        run_proxy()
+    host = args.host
+    port = args.port
+
+    free_port(port)
+
+    os_status = f"Enabled -> {', '.join(cfg.opensearch.hosts)}" if cfg.opensearch.enabled else "Disabled (Local JSONL Fallback)"
+
+    print("\n" + "=" * 72)
+    print("🛡️   BASTION WAF ENTERPRISE SECURITY GATEWAY")
+    print("=" * 72)
+    print(f"  🔒  WAF Reverse Proxy Gateway:  http://{host}:{port}")
+    print(f"  📡  OpenSearch SIEM Telemetry:   {os_status}")
+    print(f"  📋  Config File:                 {Path(os.environ.get('BASTION_CONFIG', 'config/bastion.yaml')).resolve()}")
+    print("=" * 72)
+    if cfg.sites:
+        print("  🌐  Configured Upstream Sites:")
+        for s in cfg.sites:
+            mode = "Active Defense" if s.defense_mode else "Bypass"
+            print(f"      • {s.domain:20} -> {s.upstream} ({mode})")
     else:
-        # Clean up stale ports
-        free_port(8000)
-        free_port(8080)
+        print("  🌐  Standalone Echo Mode (No upstream sites mapped)")
+    print("=" * 72)
+    print("  Press CTRL+C to stop Bastion WAF.\n")
 
-        print("\n" + "=" * 68)
-        print("🛡️   BASTION WAF NEXT-GEN SECURITY GATEWAY")
-        print("=" * 68)
-        print("  📊  WAF Security Dashboard:      http://127.0.0.1:8000")
-        print("  🔒  WAF Reverse Proxy Gateway:   http://127.0.0.1:8080")
-        print("=" * 68)
-        print("  👉  Open http://127.0.0.1:8000 to manage rules and view live SOC telemetry.")
-        print("  👉  Route protected web traffic through http://127.0.0.1:8080.")
-        print("  Press CTRL+C to terminate all Bastion WAF services.")
-        print("=" * 68 + "\n")
-
-        p_dashboard = Process(target=run_dashboard, name="Dashboard-API")
-        p_proxy = Process(target=run_proxy, name="WAF-Proxy")
-
-        processes = [p_dashboard, p_proxy]
-        for p in processes:
-            p.daemon = True
-            p.start()
-
-        def signal_handler(sig, frame):
-            print("\nShutting down all Bastion WAF services...")
-            for p in processes:
-                if p.is_alive():
-                    p.terminate()
-            free_port(8000)
-            free_port(8080)
-            sys.exit(0)
-
-        signal.signal(signal.SIGINT, signal_handler)
-        signal.signal(signal.SIGTERM, signal_handler)
-
-        try:
-            while True:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            signal_handler(None, None)
+    os.chdir(str(WAF_DIR))
+    uvicorn.run("bastion.core.proxy:app", host=host, port=port, log_level="info")
 
 
 if __name__ == "__main__":
