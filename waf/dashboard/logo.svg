@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <!-- Background tile gradient -->
+    <linearGradient id="bgGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#161922"/>
+      <stop offset="100%" stop-color="#0b0d12"/>
+    </linearGradient>
+
+    <!-- Sleek border gradient -->
+    <linearGradient id="borderGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="rgba(62, 207, 180, 0.45)"/>
+      <stop offset="50%" stop-color="rgba(255, 255, 255, 0.08)"/>
+      <stop offset="100%" stop-color="rgba(16, 185, 129, 0.25)"/>
+    </linearGradient>
+
+    <!-- Base B gradient (Spine & Bottom loop) -->
+    <linearGradient id="baseBGrad" x1="14" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#2dd4bf"/>
+      <stop offset="60%" stop-color="#14b8a6"/>
+      <stop offset="100%" stop-color="#0d9488"/>
+    </linearGradient>
+
+    <!-- Rising Arrow gradient (Bright, dynamic, forward-trending) -->
+    <linearGradient id="arrowGrad" x1="18" y1="36" x2="52" y2="14" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#14b8a6"/>
+      <stop offset="35%" stop-color="#3ecfb4"/>
+      <stop offset="75%" stop-color="#5eedd3"/>
+      <stop offset="100%" stop-color="#a7f3d0"/>
+    </linearGradient>
+
+    <!-- Soft drop shadow for ribbon layering -->
+    <filter id="ribbonShadow" x="-20%" y="-20%" width="150%" height="150%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+
+    <!-- Glow for the arrow tip -->
+    <filter id="arrowGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#3ecfb4" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- Container App Tile -->
+  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="1.2"/>
+
+  <!-- Ambient light in upper right -->
+  <circle cx="48" cy="16" r="14" fill="#3ecfb4" opacity="0.12" filter="blur(6px)"/>
+
+  <!-- SHAPE 1: Left Spine of "B" -->
+  <rect x="14" y="14" width="8" height="36" rx="4" fill="url(#baseBGrad)"/>
+
+  <!-- SHAPE 2: Bottom Loop of "B" with authentic cutout counter -->
+  <path fill-rule="evenodd" clip-rule="evenodd"
+        d="M 20 29
+           H 35
+           C 42.5 29, 47.5 33.5, 47.5 39.5
+           C 47.5 45.5, 42.5 50, 35 50
+           H 20
+           V 29
+           Z
+           M 22 35.5
+           V 43.5
+           H 34
+           C 38 43.5, 40.5 41.8, 40.5 39.5
+           C 40.5 37.2, 38 35.5, 34 35.5
+           H 22
+           Z"
+        fill="url(#baseBGrad)"/>
+
+  <!-- SHAPE 3: Dynamic Rising Arrow (Top section of "B") -->
+  <!-- Symmetrical, geometric 45° arrowhead with smooth bezier trajectory -->
+  <g filter="url(#ribbonShadow)">
+    <path filter="url(#arrowGlow)"
+          d="M 18 32
+             C 24 32, 33 27, 40 20
+             L 36 14
+             L 50 14
+             L 50 28
+             L 44 24
+             C 37 31, 28 38, 18 38
+             Z"
+          fill="url(#arrowGrad)"/>
+  </g>
+
+  <!-- Subtle glossy highlight accent at the arrow tip -->
+  <circle cx="49" cy="15" r="1.5" fill="#ffffff" opacity="0.9"/>
+</svg>

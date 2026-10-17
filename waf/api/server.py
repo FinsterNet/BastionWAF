@@ -3,12 +3,12 @@ Bastion WAF Management REST API & Dashboard Server.
 """
 
 import os
+from pathlib import Path
 import platform
 import time
-from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, Query, Response
+from fastapi import APIRouter, FastAPI, Query, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
@@ -36,16 +36,8 @@ from database.db import (
 
 init_db()
 
-app = FastAPI(title="Bastion WAF API & Dashboard Server")
+api_router = APIRouter()
 sim_engine = Engine()
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
 
 START_TIME = time.time()
 
@@ -62,28 +54,28 @@ class SiteToggleRequest(BaseModel):
     upstream: Optional[str] = None
 
 
-@app.get("/api/stats")
+@api_router.get("/api/stats")
 def stats():
     return get_stats()
 
 
-@app.get("/api/events")
+@api_router.get("/api/events")
 def events():
     return get_recent_events()
 
 
-@app.get("/api/logs")
+@api_router.get("/api/logs")
 def logs(q: str = Query("", alias="q"), threat: str = Query("All Threat Types", alias="threat")):
     return get_logs(query=q, threat=threat)
 
 
-@app.post("/api/logs/clear")
+@api_router.post("/api/logs/clear")
 def clear_all_logs():
     clear_logs()
     return {"status": "success", "message": "All security audit logs cleared"}
 
 
-@app.get("/api/export/csv")
+@api_router.get("/api/export/csv")
 def export_csv():
     csv_data = export_logs_csv()
     return Response(
@@ -93,23 +85,23 @@ def export_csv():
     )
 
 
-@app.get("/api/rules")
+@api_router.get("/api/rules")
 def list_rules():
     return get_rules()
 
 
-@app.post("/api/rules")
+@api_router.post("/api/rules")
 def update_rule(req: RuleToggleRequest):
     set_rule_state(req.rule_id, req.enabled)
     return {"status": "success", "rule_id": req.rule_id, "enabled": req.enabled}
 
 
-@app.get("/api/sites")
+@api_router.get("/api/sites")
 def list_sites():
     return get_sites()
 
 
-@app.post("/api/sites")
+@api_router.post("/api/sites")
 def update_or_add_site(req: SiteToggleRequest):
     if req.domain and req.upstream:
         add_site(req.domain, req.upstream)
@@ -120,15 +112,14 @@ def update_or_add_site(req: SiteToggleRequest):
     return {"status": "error", "message": "Invalid site payload"}
 
 
-@app.delete("/api/sites/{site_id}")
+@api_router.delete("/api/sites/{site_id}")
 def remove_site(site_id: int):
     delete_site(site_id)
     return {"status": "success", "action": "deleted", "site_id": site_id}
 
 
-@app.get("/api/system")
+@api_router.get("/api/system")
 def system_metrics():
-    # Attempt to read live memory / CPU info
     cpu_percent = 4.8
     ram_used_mb = 138.5
     total_ram_gb = 8.0
@@ -139,7 +130,6 @@ def system_metrics():
         ram_used_mb = round(mem.used / (1024 * 1024), 1)
         total_ram_gb = round(mem.total / (1024 * 1024 * 1024), 1)
     except Exception:
-        # Fallback if psutil not installed in current env
         pass
 
     uptime_sec = int(time.time() - START_TIME)
@@ -156,7 +146,7 @@ def system_metrics():
         "uptime_seconds": uptime_sec,
         "platform": platform.platform(),
         "python_version": platform.python_version(),
-        "proxy_status": "ONLINE (Port 8080)",
+        "proxy_status": "ONLINE",
         "engine_state": "ACTIVE BLOCKING",
     }
 
@@ -170,7 +160,7 @@ class PayloadSimulateRequest(BaseModel):
     client_ip: str = "192.168.1.100"
 
 
-@app.post("/api/simulate")
+@api_router.post("/api/simulate")
 def simulate_payload(req: PayloadSimulateRequest):
     inspection = inspect_request(
         method=req.method,
@@ -185,7 +175,6 @@ def simulate_payload(req: PayloadSimulateRequest):
     action_str = "403 Blocked" if blocked else ("CAPTCHA Challenged" if scored.action.value == "CHALLENGE" else "200 Allowed")
     payload_sample = scored.raw_sample or (req.query_string if req.query_string else req.path)
 
-    # Persist simulation to SQLite events table in real time
     log_event(
         client_ip=req.client_ip,
         method=req.method,
@@ -217,6 +206,16 @@ def simulate_payload(req: PayloadSimulateRequest):
         "normalized_targets_checked": len(inspection.request.targets),
     }
 
+
+app = FastAPI(title="Bastion WAF API & Dashboard Server")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+app.include_router(api_router)
 
 dashboard_dir = Path(__file__).resolve().parent.parent / "dashboard"
 if dashboard_dir.exists():

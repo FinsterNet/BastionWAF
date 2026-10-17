@@ -10,9 +10,11 @@ from pathlib import Path
 from typing import Optional, Tuple
 import httpx
 from fastapi import FastAPI, Request
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from api.server import api_router
 from .config import get_config
 from .engine import Engine
 from .inspector import inspect_request
@@ -56,6 +58,30 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Bastion WAF Reverse Proxy & Challenge Gateway", lifespan=lifespan)
 engine = Engine()
+app.include_router(api_router)
+
+dashboard_dir = Path(__file__).resolve().parent.parent.parent / "dashboard"
+if dashboard_dir.is_dir():
+    app.mount("/dashboard", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard_ui")
+
+    @app.get("/")
+    async def root_dashboard_view():
+        index_path = dashboard_dir / "index.html"
+        if index_path.is_file():
+            return FileResponse(str(index_path))
+        return JSONResponse({"status": "running", "service": "bastion-waf"})
+
+    @app.get("/styles.css")
+    async def serve_root_styles():
+        return FileResponse(str(dashboard_dir / "styles.css"), media_type="text/css")
+
+    @app.get("/app.js")
+    async def serve_root_app_js():
+        return FileResponse(str(dashboard_dir / "app.js"), media_type="application/javascript")
+
+    @app.get("/logo.svg")
+    async def serve_root_logo():
+        return FileResponse(str(dashboard_dir / "logo.svg"), media_type="image/svg+xml")
 
 
 class CaptchaVerifyPayload(BaseModel):

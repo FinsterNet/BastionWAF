@@ -1,0 +1,463 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bastion WAF — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="styles.css">
+    <link rel="icon" href="logo.svg" type="image/svg+xml">
+</head>
+<body>
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+        <div class="brand-container">
+            <div class="brand-logo"><img src="logo.svg" alt="Bastion"></div>
+            <div class="brand-text">
+                <h1>Bastion</h1>
+                <span>Web App Firewall</span>
+            </div>
+        </div>
+
+        <ul class="nav-list">
+            <li class="nav-item active" onclick="switchNav('overview', this)">
+                <i class="fa-solid fa-gauge-high"></i> Overview
+            </li>
+            <li class="nav-item" onclick="switchNav('sites', this)">
+                <i class="fa-solid fa-globe"></i> Protected Sites
+            </li>
+            <li class="nav-item" onclick="switchNav('rules', this)">
+                <i class="fa-solid fa-layer-group"></i> Rules
+                <span class="nav-badge" id="rule-count-badge">28</span>
+            </li>
+            <li class="nav-item" onclick="switchNav('sandbox', this)">
+                <i class="fa-solid fa-flask-vial"></i> Sandbox
+                <span class="nav-badge">Live</span>
+            </li>
+            <li class="nav-item" onclick="switchNav('logs', this)">
+                <i class="fa-solid fa-scroll"></i> Audit Logs
+            </li>
+            <li class="nav-item" onclick="switchNav('system', this)">
+                <i class="fa-solid fa-microchip"></i> System
+            </li>
+        </ul>
+
+        <div class="sidebar-footer">
+            <div class="status-pill" style="margin-bottom: 4px;">
+                <div class="pulse-dot"></div>
+                <span>Gateway <strong style="color: var(--text-primary);">:8080</strong></span>
+            </div>
+            <div style="color: var(--text-muted); font-size: 0.7rem;">AST Engine Online</div>
+        </div>
+    </aside>
+
+    <!-- Workspace -->
+    <div class="workspace">
+
+        <!-- Top bar -->
+        <header class="topbar">
+            <div class="topbar-left">
+                <div class="shortcut-hint" onclick="openCmdPalette()">
+                    <i class="fa-solid fa-magnifying-glass"></i>
+                    <span>Search…</span>
+                    <span class="kbd">⌘K</span>
+                </div>
+            </div>
+            <div class="topbar-right">
+                <button class="theme-toggle" id="themeToggle" onclick="toggleTheme()" title="Toggle theme">
+                    <i class="fa-solid fa-sun icon-sun"></i>
+                    <i class="fa-solid fa-moon icon-moon"></i>
+                </button>
+                <div class="topbar-pill">
+                    <div class="pulse-dot"></div> Active Blocking
+                </div>
+                <button class="btn btn-outline" style="font-size: 0.76rem;" onclick="window.open('http://127.0.0.1:8080', '_blank')">
+                    <i class="fa-solid fa-arrow-up-right-from-square"></i> Proxy :8080
+                </button>
+            </div>
+        </header>
+
+        <!-- Content -->
+        <main class="content-body">
+
+            <!-- OVERVIEW -->
+            <div id="pane-overview" class="tab-pane active">
+
+                <div class="metrics-grid">
+                    <div class="bento-card metric-card accent">
+                        <div class="metric-header">
+                            <span>Total Requests</span>
+                            <div class="metric-icon"><i class="fa-solid fa-arrow-trend-up"></i></div>
+                        </div>
+                        <div class="metric-value" id="stat-total-requests">0</div>
+                        <div class="metric-footer">
+                            <i class="fa-solid fa-bolt text-accent"></i> Real-time proxy telemetry
+                        </div>
+                    </div>
+
+                    <div class="bento-card metric-card danger">
+                        <div class="metric-header">
+                            <span>Blocked</span>
+                            <div class="metric-icon"><i class="fa-solid fa-shield-halved"></i></div>
+                        </div>
+                        <div class="metric-value" id="stat-blocked-attacks" style="color: var(--danger);">0</div>
+                        <div class="metric-footer">
+                            <span class="badge badge-red" id="stat-block-pct">0%</span> mitigated
+                        </div>
+                    </div>
+
+                    <div class="bento-card metric-card warning">
+                        <div class="metric-header">
+                            <span>Challenges</span>
+                            <div class="metric-icon"><i class="fa-solid fa-puzzle-piece"></i></div>
+                        </div>
+                        <div class="metric-value" id="stat-challenged-requests" style="color: var(--warning);">0</div>
+                        <div class="metric-footer">
+                            <i class="fa-solid fa-robot"></i> CAPTCHA verified
+                        </div>
+                    </div>
+
+                    <div class="bento-card metric-card purple">
+                        <div class="metric-header">
+                            <span>Latency</span>
+                            <div class="metric-icon"><i class="fa-solid fa-gauge-high"></i></div>
+                        </div>
+                        <div class="metric-value" id="stat-latency">0.38 ms</div>
+                        <div class="metric-footer">
+                            <span class="badge badge-green">Sub-ms</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="analytics-grid">
+                    <div class="bento-card">
+                        <div class="card-title-bar">
+                            <h2><i class="fa-solid fa-chart-area text-accent"></i> Traffic &amp; Threats</h2>
+                            <span class="badge badge-cyan"><i class="fa-solid fa-circle-dot"></i> Live</span>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="trafficChart"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="card-title-bar">
+                            <h2><i class="fa-solid fa-chart-pie text-purple"></i> Threat Categories</h2>
+                            <span class="badge badge-purple" id="category-chart-badge">Active Rules</span>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="threatCategoryChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="map-section">
+                    <div class="bento-card">
+                        <div class="card-title-bar">
+                            <h2><i class="fa-solid fa-crosshairs text-accent"></i> Threat Vectors &amp; Endpoints</h2>
+                            <span class="badge badge-cyan" id="threat-unique-badge"><i class="fa-solid fa-network-wired"></i> 0 Client IPs</span>
+                        </div>
+                        <div class="threat-analytics-container">
+                            <div>
+                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Top Targeted Endpoints (Real SQLite Data)</span>
+                                <div id="analytics-top-paths" class="analytics-list">
+                                    <div style="text-align: center; color: var(--text-muted); padding: 18px;">No targeted endpoints recorded yet.</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Top Triggered Security Rules</span>
+                                <div id="analytics-top-rules" class="analytics-rules-grid">
+                                    <div style="color: var(--text-muted); font-size: 0.76rem;">No triggered rules recorded yet.</div>
+                                </div>
+                            </div>
+                            <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border);">
+                                <span style="font-size: 0.72rem; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; display: block; margin-bottom: 8px;">Active Client IP Sources</span>
+                                <div id="analytics-top-ips" class="analytics-ips-list"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="bento-card">
+                        <div class="card-title-bar">
+                            <h2><i class="fa-solid fa-bolt text-warning"></i> Incidents</h2>
+                            <button class="btn btn-outline" style="padding: 3px 8px; font-size: 0.72rem;" onclick="fetchAuditLogs()">Refresh</button>
+                        </div>
+                        <div style="display: flex; flex-direction: column; gap: 6px; max-height: 310px; overflow-y: auto;" id="live-incident-feed">
+                            <div style="text-align: center; color: var(--text-muted); padding: 40px;">No recent incidents</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- PROTECTED SITES -->
+            <div id="pane-sites" class="tab-pane">
+                <div class="bento-card">
+                    <div class="card-title-bar">
+                        <div>
+                            <h2><i class="fa-solid fa-globe text-accent"></i> Protected Sites & Upstream Routing</h2>
+                            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">
+                                Configure target hosts and upstreams. When no site is configured, the WAF acts as an independent inspection gateway.
+                            </p>
+                        </div>
+                        <button class="btn btn-primary" onclick="openModal('addSiteModal')">
+                            <i class="fa-solid fa-plus"></i> Add Site
+                        </button>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Host / Domain</th>
+                                    <th>Upstream Target</th>
+                                    <th>Status</th>
+                                    <th>Defense Mode</th>
+                                    <th style="text-align: right;">Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="sites-tbody">
+                                <tr><td colspan="5" style="text-align: center; color: var(--text-muted); padding: 28px;">Loading sites...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RULES -->
+            <div id="pane-rules" class="tab-pane">
+                <div class="bento-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 14px; margin-bottom: 18px;">
+                        <div>
+                            <h2>Rule Engine</h2>
+                            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">Toggle detection rules. Changes sync instantly with the proxy.</p>
+                        </div>
+                        <input type="text" id="rule-search-input" placeholder="Search rules…" oninput="renderRules()" class="form-control" style="width: 240px;">
+                    </div>
+
+                    <div style="display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap;">
+                        <button class="btn btn-primary rule-cat-btn" onclick="filterRuleCategory('ALL', this)"><i class="fa-solid fa-layer-group"></i> All (28)</button>
+                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('OWASP Top 10', this)"><i class="fa-solid fa-shield-halved text-danger"></i> OWASP Top 10 (15)</button>
+                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('API Security', this)"><i class="fa-solid fa-plug text-accent"></i> API Security (7)</button>
+                        <button class="btn btn-outline rule-cat-btn" onclick="filterRuleCategory('Bot Protection', this)"><i class="fa-solid fa-robot text-warning"></i> Bot Protection (6)</button>
+                    </div>
+
+                    <div style="display: flex; flex-direction: column; gap: 8px;" id="rules-container"></div>
+                </div>
+            </div>
+
+            <!-- SANDBOX -->
+            <div id="pane-sandbox" class="tab-pane">
+                <div class="bento-card">
+                    <div class="card-title-bar">
+                        <div>
+                            <h2><i class="fa-solid fa-flask-vial text-accent"></i> Threat Sandbox</h2>
+                            <p style="font-size: 0.82rem; color: var(--text-muted); margin-top: 2px;">Test payloads against Bastion's semantic engine in real time.</p>
+                        </div>
+                    </div>
+
+                    <div class="sandbox-container">
+                        <div style="display: flex; flex-direction: column; gap: 12px;">
+                            <div>
+                                <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 5px;">Presets</label>
+                                <div class="preset-pills">
+                                    <button class="preset-btn" onclick="setSandboxPreset('sqli')">SQLi</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('xss')">XSS</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('lfi')">LFI</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('rce')">RCE</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('ssrf')">SSRF</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('ssti')">SSTI</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('log4j')">Log4Shell</button>
+                                    <button class="preset-btn" onclick="setSandboxPreset('clean')">Clean</button>
+                                </div>
+                            </div>
+
+                            <div style="display: grid; grid-template-columns: 100px 1fr; gap: 8px;">
+                                <div>
+                                    <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 5px;">Method</label>
+                                    <select id="sb-method" class="form-control" style="width: 100%;">
+                                        <option value="GET">GET</option>
+                                        <option value="POST">POST</option>
+                                        <option value="PUT">PUT</option>
+                                        <option value="DELETE">DELETE</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 5px;">Path</label>
+                                    <input type="text" id="sb-path" value="/search" class="form-control" style="width: 100%;">
+                                </div>
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 5px;">Query String</label>
+                                <input type="text" id="sb-query" value="q=admin' OR '1'='1" class="form-control" style="width: 100%; font-family: var(--font-mono);">
+                            </div>
+
+                            <div>
+                                <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 5px;">Body</label>
+                                <textarea id="sb-body" class="form-control" rows="3" style="width: 100%; font-family: var(--font-mono);" placeholder="Optional payload…"></textarea>
+                            </div>
+
+                            <button class="btn btn-primary" onclick="runSandboxSimulation()" style="width: 100%; justify-content: center; padding: 10px;">
+                                <i class="fa-solid fa-play"></i> Evaluate
+                            </button>
+                        </div>
+
+                        <div class="sandbox-result-box" id="sandbox-result-container">
+                            <div style="color: var(--text-muted); text-align: center; margin: auto;">
+                                <i class="fa-solid fa-microscope" style="font-size: 2rem; margin-bottom: 10px; opacity: 0.4;"></i>
+                                <p>Click Evaluate to inspect the payload.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- LOGS -->
+            <div id="pane-logs" class="tab-pane">
+                <div class="bento-card">
+                    <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 12px; margin-bottom: 14px;">
+                        <h2><i class="fa-solid fa-scroll text-accent"></i> Audit Logs</h2>
+                        <div style="display: flex; gap: 8px;">
+                            <button class="btn btn-outline" onclick="exportLogsCsv()"><i class="fa-solid fa-download"></i> CSV</button>
+                            <button class="btn btn-danger" onclick="clearAuditLogs()"><i class="fa-solid fa-trash"></i> Clear</button>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap;">
+                        <input type="text" id="log-search-query" onkeyup="fetchAuditLogs()" placeholder="Search…" class="form-control" style="flex: 1; min-width: 200px;">
+                        <select id="log-threat-type" onchange="fetchAuditLogs()" class="form-control" style="width: 200px;">
+                            <option value="All Threat Types">All Categories</option>
+                            <option value="SQL">SQL Injection</option>
+                            <option value="XSS">XSS</option>
+                            <option value="Path Traversal">Path Traversal</option>
+                            <option value="RCE">RCE</option>
+                            <option value="SSRF">SSRF</option>
+                            <option value="CHALLENGE">CAPTCHA</option>
+                            <option value="API Security">API</option>
+                            <option value="Bot Protection">Bots</option>
+                        </select>
+                    </div>
+
+                    <div class="table-responsive">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Client IP</th>
+                                    <th>Path</th>
+                                    <th>Rule</th>
+                                    <th>Action</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody id="audit-log-body">
+                                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- SYSTEM -->
+            <div id="pane-system" class="tab-pane">
+                <div class="bento-card">
+                    <div class="card-title-bar">
+                        <h2><i class="fa-solid fa-microchip text-accent"></i> System Health</h2>
+                    </div>
+                    <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr);">
+                        <div class="bento-card">
+                            <div class="metric-header"><span>CPU</span></div>
+                            <div class="metric-value" id="sys-cpu">0%</div>
+                        </div>
+                        <div class="bento-card">
+                            <div class="metric-header"><span>Memory</span></div>
+                            <div class="metric-value" id="sys-ram">0 MB</div>
+                        </div>
+                        <div class="bento-card">
+                            <div class="metric-header"><span>Uptime</span></div>
+                            <div class="metric-value" id="sys-uptime" style="font-size: 1.4rem;">0s</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <!-- MODAL: Payload Inspector -->
+    <div class="modal-backdrop" id="inspectModal">
+        <div class="modal-box" style="max-width: 640px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px;">
+                <h3 style="color: var(--accent);"><i class="fa-solid fa-microscope"></i> Payload Inspector</h3>
+                <button class="btn btn-outline" style="padding: 4px 8px;" onclick="closeModal('inspectModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; background: var(--bg-input); padding: 10px; border-radius: var(--radius-sm); font-size: 0.8rem;">
+                    <div><strong style="color: var(--text-muted);">Time:</strong> <span id="modal-time">-</span></div>
+                    <div><strong style="color: var(--text-muted);">IP:</strong> <span id="modal-ip">-</span></div>
+                    <div><strong style="color: var(--text-muted);">Path:</strong> <span id="modal-path">-</span></div>
+                    <div><strong style="color: var(--text-muted);">Rule:</strong> <span id="modal-rule" class="badge badge-red">-</span></div>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Reason</label>
+                    <div id="modal-reason" style="color: var(--warning); font-size: 0.85rem; font-weight: 600;">-</div>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Payload</label>
+                    <pre id="modal-payload" style="background: var(--terminal-bg); border: 1px solid var(--border); padding: 12px; border-radius: var(--radius-sm); font-family: var(--font-mono); font-size: 0.8rem; color: var(--accent); max-height: 200px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Add Protected Site -->
+    <div class="modal-backdrop" id="addSiteModal" onclick="if(event.target===this) closeModal('addSiteModal')">
+        <div class="modal-box" style="max-width: 480px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="color: var(--accent);"><i class="fa-solid fa-globe"></i> Add Protected Site</h3>
+                <button class="btn btn-outline" style="padding: 4px 8px;" onclick="closeModal('addSiteModal')"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+            <form onsubmit="event.preventDefault(); submitNewSite();" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Incoming Host / Domain</label>
+                    <input type="text" id="newSiteDomain" class="form-control" style="width: 100%;" placeholder="e.g. app.finster.net or 127.0.0.1:8080" required>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Upstream Target URL</label>
+                    <input type="text" id="newSiteUpstream" class="form-control" style="width: 100%;" placeholder="e.g. http://127.0.0.1:3000 or http://internal-service:8080" required>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('addSiteModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary"><i class="fa-solid fa-plus"></i> Add Site</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Command Palette -->
+    <div class="modal-backdrop" id="cmdPaletteModal" onclick="if(event.target===this) closeCmdPalette()">
+        <div class="modal-box" style="padding: 16px;">
+            <input type="text" id="cmdPaletteInput" placeholder="Type a command…" class="cmd-palette-input" onkeyup="filterCmdPalette(event)">
+            <ul class="cmd-list" id="cmdList">
+                <li class="cmd-item" onclick="execCmd('overview')"><span><i class="fa-solid fa-gauge-high" style="margin-right: 8px;"></i> Overview</span> <span class="kbd">1</span></li>
+                <li class="cmd-item" onclick="execCmd('sites')"><span><i class="fa-solid fa-globe" style="margin-right: 8px;"></i> Protected Sites</span> <span class="kbd">2</span></li>
+                <li class="cmd-item" onclick="execCmd('rules')"><span><i class="fa-solid fa-layer-group" style="margin-right: 8px;"></i> Rules</span> <span class="kbd">3</span></li>
+                <li class="cmd-item" onclick="execCmd('sandbox')"><span><i class="fa-solid fa-flask-vial" style="margin-right: 8px;"></i> Sandbox</span> <span class="kbd">4</span></li>
+                <li class="cmd-item" onclick="execCmd('logs')"><span><i class="fa-solid fa-scroll" style="margin-right: 8px;"></i> Audit Logs</span> <span class="kbd">5</span></li>
+                <li class="cmd-item" onclick="execCmd('clear-logs')"><span><i class="fa-solid fa-trash text-danger" style="margin-right: 8px;"></i> Clear Logs</span></li>
+            </ul>
+        </div>
+    </div>
+
+    <!-- Toast -->
+    <div class="toast" id="toast"><i class="fa-solid fa-circle-check text-success"></i> <span id="toast-msg">Done</span></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
