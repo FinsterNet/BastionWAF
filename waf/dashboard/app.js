@@ -581,16 +581,60 @@ function initCharts() {
     });
 }
 
-// ---- Telemetry ----
+// ---- Telemetry & Counter Animations ----
+let isInitialTelemetryLoad = true;
+
+function animateNumber(elementId, targetValue, duration = 1200, suffix = '') {
+    const el = document.getElementById(elementId);
+    if (!el) return;
+    const endVal = parseFloat(targetValue) || 0;
+    const isFloat = String(targetValue).includes('.');
+
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        el.textContent = (isFloat ? endVal.toFixed(2) : Math.round(endVal).toLocaleString()) + suffix;
+        return;
+    }
+
+    if (endVal === 0) {
+        el.textContent = '0' + suffix;
+        return;
+    }
+
+    const startVal = 0;
+    const startTime = performance.now();
+
+    function frame(now) {
+        const elapsed = now - startTime;
+        const progress = Math.min(elapsed / duration, 1);
+        const ease = 1 - Math.pow(1 - progress, 3);
+        const current = startVal + (endVal - startVal) * ease;
+        el.textContent = (isFloat ? current.toFixed(2) : Math.round(current).toLocaleString()) + suffix;
+        if (progress < 1) {
+            requestAnimationFrame(frame);
+        } else {
+            el.textContent = (isFloat ? endVal.toFixed(2) : Math.round(endVal).toLocaleString()) + suffix;
+        }
+    }
+    requestAnimationFrame(frame);
+}
+
 async function pollTelemetry() {
     try {
         const res = await fetch('/api/stats');
         const stats = await res.json();
 
-        document.getElementById('stat-total-requests').textContent = stats.total_requests;
-        document.getElementById('stat-blocked-attacks').textContent = stats.blocked_attacks;
-        document.getElementById('stat-challenged-requests').textContent = stats.challenged_requests || 0;
-        document.getElementById('stat-latency').textContent = (stats.latency_ms || 0.38) + ' ms';
+        if (isInitialTelemetryLoad) {
+            isInitialTelemetryLoad = false;
+            animateNumber('stat-total-requests', stats.total_requests);
+            animateNumber('stat-blocked-attacks', stats.blocked_attacks);
+            animateNumber('stat-challenged-requests', stats.challenged_requests || 0);
+            animateNumber('stat-latency', stats.latency_ms || 0.38, 1200, ' ms');
+        } else {
+            document.getElementById('stat-total-requests').textContent = Number(stats.total_requests).toLocaleString();
+            document.getElementById('stat-blocked-attacks').textContent = Number(stats.blocked_attacks).toLocaleString();
+            document.getElementById('stat-challenged-requests').textContent = Number(stats.challenged_requests || 0).toLocaleString();
+            document.getElementById('stat-latency').textContent = (stats.latency_ms || 0.38) + ' ms';
+        }
 
         const pct = stats.total_requests > 0 ? ((stats.blocked_attacks / stats.total_requests) * 100).toFixed(1) : '0';
         document.getElementById('stat-block-pct').textContent = pct + '%';
