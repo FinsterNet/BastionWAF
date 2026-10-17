@@ -567,8 +567,9 @@ function initCharts() {
             labels: ['OWASP Top 10', 'API Security', 'Bot Protection'],
             datasets: [{
                 data: [15, 7, 6], // default active rule distribution
-                backgroundColor: ['#e5484d', '#3ecfb4', '#e5a435'],
-                borderWidth: 0,
+                backgroundColor: ['#0075FF', '#7928CA', '#01B574'],
+                borderWidth: 2,
+                borderColor: '#060B26',
             }]
         },
         options: {
