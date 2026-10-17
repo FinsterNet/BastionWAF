@@ -2,48 +2,48 @@
   <defs>
     <!-- Background tile gradient -->
     <linearGradient id="bgGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#161922"/>
-      <stop offset="100%" stop-color="#0b0d12"/>
+      <stop offset="0%" stop-color="#0F1535"/>
+      <stop offset="100%" stop-color="#060B26"/>
     </linearGradient>
 
     <!-- Sleek border gradient -->
     <linearGradient id="borderGrad" x1="0" y1="0" x2="64" y2="64" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="rgba(62, 207, 180, 0.45)"/>
-      <stop offset="50%" stop-color="rgba(255, 255, 255, 0.08)"/>
-      <stop offset="100%" stop-color="rgba(16, 185, 129, 0.25)"/>
+      <stop offset="0%" stop-color="rgba(0, 117, 255, 0.6)"/>
+      <stop offset="50%" stop-color="rgba(44, 217, 255, 0.3)"/>
+      <stop offset="100%" stop-color="rgba(121, 40, 202, 0.4)"/>
     </linearGradient>
 
     <!-- Base B gradient (Spine & Bottom loop) -->
     <linearGradient id="baseBGrad" x1="14" y1="14" x2="48" y2="50" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#2dd4bf"/>
-      <stop offset="60%" stop-color="#14b8a6"/>
-      <stop offset="100%" stop-color="#0d9488"/>
+      <stop offset="0%" stop-color="#0075FF"/>
+      <stop offset="60%" stop-color="#0056B3"/>
+      <stop offset="100%" stop-color="#003D82"/>
     </linearGradient>
 
     <!-- Rising Arrow gradient (Bright, dynamic, forward-trending) -->
     <linearGradient id="arrowGrad" x1="18" y1="36" x2="52" y2="14" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#14b8a6"/>
-      <stop offset="35%" stop-color="#3ecfb4"/>
-      <stop offset="75%" stop-color="#5eedd3"/>
-      <stop offset="100%" stop-color="#a7f3d0"/>
+      <stop offset="0%" stop-color="#0075FF"/>
+      <stop offset="35%" stop-color="#2CD9FF"/>
+      <stop offset="75%" stop-color="#70E2FF"/>
+      <stop offset="100%" stop-color="#FFFFFF"/>
     </linearGradient>
 
     <!-- Soft drop shadow for ribbon layering -->
     <filter id="ribbonShadow" x="-20%" y="-20%" width="150%" height="150%">
-      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.5"/>
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.6"/>
     </filter>
 
     <!-- Glow for the arrow tip -->
     <filter id="arrowGlow" x="-30%" y="-30%" width="160%" height="160%">
-      <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#3ecfb4" flood-opacity="0.45"/>
+      <feDropShadow dx="0" dy="0" stdDeviation="3.5" flood-color="#2CD9FF" flood-opacity="0.6"/>
     </filter>
   </defs>
 
   <!-- Container App Tile -->
-  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="1.2"/>
+  <rect width="64" height="64" rx="16" fill="url(#bgGrad)" stroke="url(#borderGrad)" stroke-width="1.5"/>
 
   <!-- Ambient light in upper right -->
-  <circle cx="48" cy="16" r="14" fill="#3ecfb4" opacity="0.12" filter="blur(6px)"/>
+  <circle cx="48" cy="16" r="16" fill="#2CD9FF" opacity="0.18" filter="blur(6px)"/>
 
   <!-- SHAPE 1: Left Spine of "B" -->
   <rect x="14" y="14" width="8" height="36" rx="4" fill="url(#baseBGrad)"/>
