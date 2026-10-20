@@ -67,6 +67,7 @@ if dashboard_dir.is_dir():
     app.mount("/dashboard", StaticFiles(directory=str(dashboard_dir), html=True), name="dashboard_ui")
 
     @app.get("/")
+    @app.get("/login")
     async def root_dashboard_view():
         index_path = dashboard_dir / "index.html"
         if index_path.is_file():
