@@ -20,6 +20,7 @@ if str(WAF_DIR) not in sys.path:
     sys.path.insert(0, str(WAF_DIR))
 
 from bastion.core.config import get_config
+from database.db import create_first_admin_atomic, has_users, init_db
 
 
 def free_port(port: int):
@@ -63,8 +64,14 @@ def main():
         for s in cfg.sites:
             mode = "Active Defense" if s.defense_mode else "Bypass"
             print(f"      • {s.domain:20} -> {s.upstream} ({mode})")
-    else:
-        print("  🌐  Standalone Echo Mode (No upstream sites mapped)")
+    init_db()
+    admin_user = os.environ.get("BASTION_ADMIN_USER", "admin")
+    admin_password = os.environ.get("BASTION_ADMIN_PASSWORD", "@Robelshitahun7")
+    if not has_users():
+        success, msg, uid = create_first_admin_atomic(admin_user, admin_password)
+        if success:
+            print(f"  👑  Default administrator account created: '{admin_user}'")
+
     print("=" * 72)
     print("  Press CTRL+C to stop Bastion WAF.\n")
 

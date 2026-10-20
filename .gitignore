@@ -25,3 +25,8 @@ htmlcov/
 *.swp
 *.swo
 .DS_Store
+
+# Secrets and credentials
+.secret_key
+*.secret_key
+waf/config/.secret_key

@@ -1,11 +1,47 @@
 // ============================================================
-// Bastion WAF Dashboard — Application Logic
+// Bastion WAF Dashboard — Application Logic & Security
 // ============================================================
 
 let cachedRules = [];
 let activeRuleCategory = 'ALL';
 let trafficChartInstance = null;
 let threatChartInstance = null;
+
+// Authentication & Session State
+let currentCsrfToken = null;
+let currentUser = null;
+let isSetupMode = false;
+let pending2FAToken = null;
+let isRecoveryCodeMode = false;
+let telemetryTimer = null;
+let isInitialTelemetryLoad = true;
+
+// ---- Authenticated Fetch Wrapper with CSRF & 401 Interception ----
+async function authFetch(url, options = {}) {
+    options.credentials = options.credentials || 'same-origin';
+    options.headers = options.headers || {};
+
+    const method = (options.method || 'GET').toUpperCase();
+    if (currentCsrfToken && ['POST', 'PUT', 'DELETE', 'PATCH'].includes(method)) {
+        options.headers['X-CSRF-Token'] = currentCsrfToken;
+    }
+
+    try {
+        const res = await fetch(url, options);
+        if (res.status === 401) {
+            // Unauthenticated: present login modal and pause background polls
+            if (telemetryTimer) {
+                clearInterval(telemetryTimer);
+                telemetryTimer = null;
+            }
+            showAuthModal(false);
+        }
+        return res;
+    } catch (err) {
+        console.error('Fetch error:', err);
+        throw err;
+    }
+}
 
 // ---- Theme ----
 function getTheme() {
@@ -73,12 +109,13 @@ function switchNav(tabId, el) {
     if (tabId === 'system') fetchSystem();
 }
 
-// ---- Modals ----
-function openModal(id) { document.getElementById(id).classList.add('active'); }
-function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+// ---- Modals & Notifications ----
+function openModal(id) { document.getElementById(id)?.classList.add('active'); }
+function closeModal(id) { document.getElementById(id)?.classList.remove('active'); }
 
 function showToast(msg) {
     const t = document.getElementById('toast');
+    if (!t) return;
     document.getElementById('toast-msg').textContent = msg;
     t.classList.add('show');
     setTimeout(() => t.classList.remove('show'), 2400);
@@ -94,6 +131,386 @@ function escapeHtml(str) {
         .replace(/'/g, '&#039;');
 }
 
+// ---- Authentication & Session Operations ----
+async function checkAuthStatus() {
+    try {
+        const res = await fetch('/api/auth/status', { credentials: 'same-origin' });
+        const data = await res.json();
+
+        if (data.setup_required) {
+            showAuthModal(true);
+            return;
+        }
+
+        if (data.authenticated && data.user) {
+            onAuthSuccess(data.user, data.csrf_token);
+        } else {
+            showAuthModal(false);
+        }
+    } catch (err) {
+        console.error('Failed to check auth status:', err);
+        showAuthModal(false);
+    }
+}
+
+function showAuthModal(isSetup) {
+    isSetupMode = isSetup;
+    const modal = document.getElementById('authModal');
+    const title = document.getElementById('auth-title');
+    const subtitle = document.getElementById('auth-subtitle');
+    const submitBtn = document.getElementById('auth-submit-btn');
+    const forgotLink = document.getElementById('link-forgot-pwd');
+    const alertBox = document.getElementById('auth-alert');
+
+    if (alertBox) alertBox.style.display = 'none';
+
+    resetAuthForm();
+
+    if (isSetup) {
+        title.textContent = 'Setup Administrator';
+        subtitle.textContent = 'Create the initial administrator account (minimum 12 characters).';
+        submitBtn.textContent = 'Create Administrator Account';
+        if (forgotLink) forgotLink.style.display = 'none';
+    } else {
+        title.textContent = 'Bastion Security Login';
+        subtitle.textContent = 'Enter your administrator credentials to access the SOC gateway.';
+        submitBtn.textContent = 'Authenticate';
+        if (forgotLink) forgotLink.style.display = 'block';
+    }
+
+    modal?.classList.add('active');
+}
+
+function resetAuthForm() {
+    document.getElementById('auth-primary-form').style.display = 'flex';
+    document.getElementById('auth-2fa-form').style.display = 'none';
+    document.getElementById('auth-forgot-form').style.display = 'none';
+    pending2FAToken = null;
+    isRecoveryCodeMode = false;
+}
+
+function showAuthError(msg) {
+    const alertBox = document.getElementById('auth-alert');
+    if (alertBox) {
+        alertBox.textContent = msg;
+        alertBox.style.display = 'block';
+    }
+}
+
+async function handleAuthSubmit(e) {
+    e.preventDefault();
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-password').value;
+    const endpoint = isSetupMode ? '/api/auth/setup' : '/api/auth/login';
+
+    const alertBox = document.getElementById('auth-alert');
+    if (alertBox) alertBox.style.display = 'none';
+
+    try {
+        const res = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email, password }),
+            credentials: 'same-origin',
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            showAuthError(data.detail || data.message || 'Authentication failed');
+            return;
+        }
+
+        if (data.status === '2fa_required') {
+            // Trigger 2FA view
+            pending2FAToken = data.temp_token;
+            document.getElementById('auth-primary-form').style.display = 'none';
+            document.getElementById('auth-2fa-form').style.display = 'flex';
+            setTimeout(() => document.getElementById('auth-2fa-code').focus(), 50);
+            return;
+        }
+
+        if (data.user) {
+            onAuthSuccess(data.user, data.csrf_token);
+        }
+    } catch (err) {
+        showAuthError('Network error connecting to security server');
+    }
+}
+
+function toggleRecoveryMode() {
+    isRecoveryCodeMode = !isRecoveryCodeMode;
+    const label = document.getElementById('label-2fa-code');
+    const input = document.getElementById('auth-2fa-code');
+    const link = document.getElementById('link-recovery');
+
+    if (isRecoveryCodeMode) {
+        label.textContent = '8-Character Recovery Code (e.g. ab12-cd34)';
+        input.placeholder = 'ab12-cd34';
+        input.maxLength = 12;
+        link.textContent = 'Use 6-digit TOTP code';
+    } else {
+        label.textContent = '6-Digit Authenticator Code';
+        input.placeholder = '123456';
+        input.maxLength = 6;
+        link.textContent = 'Use 8-character recovery code';
+    }
+}
+
+async function handleTwoFactorSubmit(e) {
+    e.preventDefault();
+    const code = document.getElementById('auth-2fa-code').value.trim();
+    if (!code || !pending2FAToken) return;
+
+    try {
+        const res = await fetch('/api/auth/2fa/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                temp_token: pending2FAToken,
+                code: code,
+                is_recovery: isRecoveryCodeMode,
+            }),
+            credentials: 'same-origin',
+        });
+        const data = await res.json();
+
+        if (!res.ok) {
+            showAuthError(data.detail || 'Verification code rejected');
+            return;
+        }
+
+        if (data.user) {
+            onAuthSuccess(data.user, data.csrf_token);
+        }
+    } catch (err) {
+        showAuthError('Error during two-factor verification');
+    }
+}
+
+function toggleForgotPassword(show) {
+    document.getElementById('auth-primary-form').style.display = show ? 'none' : 'flex';
+    document.getElementById('auth-forgot-form').style.display = show ? 'flex' : 'none';
+    const alertBox = document.getElementById('auth-alert');
+    if (alertBox) alertBox.style.display = 'none';
+}
+
+async function handleForgotSubmit(e) {
+    e.preventDefault();
+    const email = document.getElementById('auth-forgot-email').value.trim();
+
+    try {
+        const res = await fetch('/api/auth/reset/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email }),
+        });
+        const data = await res.json();
+        showToast(data.message || 'Reset request dispatched');
+        toggleForgotPassword(false);
+    } catch (err) {
+        showToast('Error requesting password reset');
+    }
+}
+
+function onAuthSuccess(user, csrfToken) {
+    currentUser = user;
+    currentCsrfToken = csrfToken;
+
+    closeModal('authModal');
+
+    // Update Topbar
+    const emailChip = document.getElementById('topbar-user-email');
+    if (emailChip) {
+        emailChip.textContent = user.email;
+        emailChip.style.display = 'inline-block';
+    }
+
+    // Initialize telemetry & dashboard data
+    if (!trafficChartInstance) {
+        initCharts();
+    }
+    fetchRules();
+    pollTelemetry();
+
+    if (!telemetryTimer) {
+        telemetryTimer = setInterval(pollTelemetry, 3000);
+    }
+
+    showToast(`Authenticated as ${user.email}`);
+}
+
+async function handleLogout() {
+    try {
+        await fetch('/api/auth/logout', {
+            method: 'POST',
+            credentials: 'same-origin',
+        });
+    } catch (err) {}
+
+    currentUser = null;
+    currentCsrfToken = null;
+    if (telemetryTimer) {
+        clearInterval(telemetryTimer);
+        telemetryTimer = null;
+    }
+
+    const emailChip = document.getElementById('topbar-user-email');
+    if (emailChip) emailChip.style.display = 'none';
+
+    showToast('Session terminated');
+    showAuthModal(false);
+}
+
+// ---- Security Settings & 2FA Management Modal ----
+function openSecurityModal() {
+    if (!currentUser) return;
+    openModal('securityModal');
+
+    const badge = document.getElementById('totp-status-badge');
+    const enabledBox = document.getElementById('totp-enabled-container');
+    const disabledBox = document.getElementById('totp-disabled-container');
+    const setupFlow = document.getElementById('totp-setup-flow');
+    const recDisplay = document.getElementById('recovery-codes-display');
+
+    if (setupFlow) setupFlow.style.display = 'none';
+    if (recDisplay) recDisplay.style.display = 'none';
+
+    if (currentUser.totp_enabled) {
+        badge.textContent = 'Active';
+        badge.className = 'badge badge-green';
+        enabledBox.style.display = 'block';
+        disabledBox.style.display = 'none';
+    } else {
+        badge.textContent = 'Disabled';
+        badge.className = 'badge badge-amber';
+        enabledBox.style.display = 'none';
+        disabledBox.style.display = 'block';
+    }
+}
+
+async function initiate2FASetup() {
+    try {
+        const res = await authFetch('/api/auth/2fa/setup', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+            document.getElementById('totp-secret-key').value = data.secret;
+            document.getElementById('totp-disabled-container').style.display = 'none';
+            document.getElementById('totp-setup-flow').style.display = 'block';
+        } else {
+            showToast(data.detail || 'Failed to start 2FA setup');
+        }
+    } catch (e) {
+        showToast('Network error setting up 2FA');
+    }
+}
+
+function copyTotpSecret() {
+    const input = document.getElementById('totp-secret-key');
+    navigator.clipboard.writeText(input.value);
+    showToast('Secret key copied to clipboard');
+}
+
+async function confirm2FAEnable() {
+    const secret = document.getElementById('totp-secret-key').value;
+    const code = document.getElementById('totp-confirm-code').value.trim();
+
+    if (!code) {
+        showToast('Please enter the 6-digit code');
+        return;
+    }
+
+    try {
+        const res = await authFetch('/api/auth/2fa/enable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ secret, code }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            currentUser.totp_enabled = true;
+            document.getElementById('totp-setup-flow').style.display = 'none';
+            document.getElementById('totp-status-badge').textContent = 'Active';
+            document.getElementById('totp-status-badge').className = 'badge badge-green';
+            document.getElementById('totp-enabled-container').style.display = 'block';
+
+            // Display recovery codes
+            const grid = document.getElementById('recovery-codes-grid');
+            grid.innerHTML = (data.recovery_codes || []).map(c => `<div>${c}</div>`).join('');
+            document.getElementById('recovery-codes-display').style.display = 'block';
+            showToast('2FA Enabled successfully');
+        } else {
+            showToast(data.detail || 'Invalid verification code');
+        }
+    } catch (e) {
+        showToast('Error verifying 2FA code');
+    }
+}
+
+function copyRecoveryCodes() {
+    const codes = Array.from(document.querySelectorAll('#recovery-codes-grid div')).map(d => d.textContent).join('\n');
+    navigator.clipboard.writeText(codes);
+    showToast('Recovery codes copied');
+}
+
+function initiate2FADisable() {
+    const form = document.getElementById('totp-disable-form');
+    form.style.display = form.style.display === 'none' ? 'block' : 'none';
+}
+
+async function confirm2FADisable() {
+    const password = document.getElementById('totp-disable-pwd').value;
+    if (!password) {
+        showToast('Password is required');
+        return;
+    }
+
+    try {
+        const res = await authFetch('/api/auth/2fa/disable', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ password }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            currentUser.totp_enabled = false;
+            openSecurityModal();
+            showToast('2FA has been disabled');
+        } else {
+            showToast(data.detail || 'Failed to disable 2FA');
+        }
+    } catch (e) {
+        showToast('Error disabling 2FA');
+    }
+}
+
+async function handleChangePassword() {
+    const current_password = document.getElementById('pwd-current').value;
+    const new_password = document.getElementById('pwd-new').value;
+
+    try {
+        const res = await authFetch('/api/auth/password/change', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ current_password, new_password }),
+        });
+        const data = await res.json();
+
+        if (res.ok) {
+            if (data.csrf_token) currentCsrfToken = data.csrf_token;
+            document.getElementById('pwd-current').value = '';
+            document.getElementById('pwd-new').value = '';
+            closeModal('securityModal');
+            showToast('Password updated');
+        } else {
+            showToast(data.detail || 'Password update failed');
+        }
+    } catch (e) {
+        showToast('Network error updating password');
+    }
+}
+
 // ---- Command Palette ----
 window.addEventListener('keydown', (e) => {
     if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
@@ -104,12 +521,14 @@ window.addEventListener('keydown', (e) => {
         closeCmdPalette();
         closeModal('inspectModal');
         closeModal('addSiteModal');
+        closeModal('securityModal');
+        closeModal('confirmClearModal');
     }
 });
 
 function openCmdPalette() {
     openModal('cmdPaletteModal');
-    setTimeout(() => document.getElementById('cmdPaletteInput').focus(), 50);
+    setTimeout(() => document.getElementById('cmdPaletteInput')?.focus(), 50);
 }
 function closeCmdPalette() { closeModal('cmdPaletteModal'); }
 
@@ -134,7 +553,7 @@ async function fetchSites() {
     const tbody = document.getElementById('sites-tbody');
     if (!tbody) return;
     try {
-        const res = await fetch('/api/sites');
+        const res = await authFetch('/api/sites');
         const sites = await res.json();
         renderSites(sites);
     } catch (e) {
@@ -202,7 +621,7 @@ function renderSites(sites) {
 
 async function toggleSiteDefense(siteId, enabled) {
     try {
-        const res = await fetch('/api/sites', {
+        const res = await authFetch('/api/sites', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ site_id: siteId, defense_mode: enabled }),
@@ -221,7 +640,7 @@ async function toggleSiteDefense(siteId, enabled) {
 async function deleteSite(siteId, domain) {
     if (!confirm(`Are you sure you want to remove ${domain}?`)) return;
     try {
-        const res = await fetch(`/api/sites/${siteId}`, { method: 'DELETE' });
+        const res = await authFetch(`/api/sites/${siteId}`, { method: 'DELETE' });
         if (res.ok) {
             showToast(`Removed ${domain}`);
             fetchSites();
@@ -245,7 +664,7 @@ async function submitNewSite() {
     }
 
     try {
-        const res = await fetch('/api/sites', {
+        const res = await authFetch('/api/sites', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ domain: domain, upstream: upstream }),
@@ -316,7 +735,7 @@ function renderRules() {
 
 async function fetchRules() {
     try {
-        const res = await fetch('/api/rules');
+        const res = await authFetch('/api/rules');
         cachedRules = await res.json();
         document.getElementById('rule-count-badge').textContent = cachedRules.length;
 
@@ -338,7 +757,7 @@ async function fetchRules() {
 
 async function toggleRule(ruleId, isChecked) {
     try {
-        await fetch('/api/rules', {
+        await authFetch('/api/rules', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ rule_id: ruleId, enabled: isChecked })
@@ -347,7 +766,7 @@ async function toggleRule(ruleId, isChecked) {
     } catch (err) { console.error(err); }
 }
 
-// ---- Sandbox ----
+// ---- Threat Sandbox ----
 function setSandboxPreset(type) {
     const method = document.getElementById('sb-method');
     const path = document.getElementById('sb-path');
@@ -379,7 +798,7 @@ async function runSandboxSimulation() {
     resultBox.innerHTML = `<div style="text-align: center; margin: auto;"><p style="margin-top: 8px; color: var(--accent); font-weight: 600;">Evaluating…</p></div>`;
 
     try {
-        const res = await fetch('/api/simulate', {
+        const res = await authFetch('/api/simulate', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ method, path, query_string, body, headers: { 'user-agent': 'Bastion-Sandbox-Tester/1.0' } })
@@ -431,7 +850,7 @@ async function runSandboxSimulation() {
             </div>
         `;
 
-        // Instantly refresh telemetry, live charts, and incident feed from database
+        // Instantly refresh telemetry
         pollTelemetry();
     } catch (err) {
         resultBox.innerHTML = `<div style="color: var(--danger); text-align: center; margin: auto;">Error — check console.</div>`;
@@ -454,50 +873,32 @@ function renderThreatAnalytics(analytics) {
         if (paths.length === 0) {
             pathsList.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 18px;">No targeted endpoints recorded yet.</div>`;
         } else {
-            const maxHits = Math.max(...paths.map(p => p.total), 1);
-            pathsList.innerHTML = paths.map(p => {
-                const pct = Math.round((p.total / maxHits) * 100);
-                return `
-                    <div class="analytics-item">
-                        <div style="display: flex; align-items: center; gap: 8px;">
-                            <span class="badge ${p.blocked > 0 ? 'badge-red' : 'badge-green'}">${p.blocked > 0 ? 'Blocked' : 'Clean'}</span>
-                            <code style="color: var(--text-primary); font-size: 0.8rem;">${p.path}</code>
-                        </div>
-                        <div class="analytics-meter-wrap">
-                            <div class="analytics-meter-bar">
-                                <div class="analytics-meter-fill ${p.blocked > 0 ? 'danger' : ''}" style="width: ${pct}%;"></div>
-                            </div>
-                            <div style="font-family: var(--font-mono); font-size: 0.74rem; min-width: 48px; text-align: right;">
-                                <strong style="color: ${p.blocked > 0 ? 'var(--danger)' : 'var(--accent)'};">${p.total}</strong>
-                                <span style="color: var(--text-muted); font-size: 0.68rem;">reqs</span>
-                            </div>
-                        </div>
-                    </div>
-                `;
-            }).join('');
-        }
-    }
-
-    // 2. Top triggered rules
-    const rulesGrid = document.getElementById('analytics-top-rules');
-    if (rulesGrid) {
-        const rules = analytics.top_rules || [];
-        if (rules.length === 0) {
-            rulesGrid.innerHTML = `<div style="color: var(--text-muted); font-size: 0.74rem;">No rule triggers recorded yet.</div>`;
-        } else {
-            rulesGrid.innerHTML = rules.map(r => `
-                <div class="analytics-rule-card">
-                    <div style="display: flex; justify-content: space-between; align-items: center;">
-                        <span class="badge badge-red" style="font-size: 0.68rem;">${r.rule_id}</span>
-                        <strong style="color: var(--danger); font-family: var(--font-mono); font-size: 0.78rem;">${r.count}x</strong>
-                    </div>
-                    <div style="font-size: 0.72rem; color: var(--text-secondary); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${r.name}</div>
+            pathsList.innerHTML = paths.map(p => `
+                <div class="analytics-path-row">
+                    <span class="path-badge">${escapeHtml(p.path)}</span>
+                    <span class="count-badge">${p.count} attacks</span>
                 </div>
             `).join('');
         }
     }
 
-    // 3. Active client IPs (real IPs, no fake countries)
+    // 2. Top triggered rules
+    const rulesList = document.getElementById('analytics-top-rules');
+    if (rulesList) {
+        const rules = analytics.top_rules || [];
+        if (rules.length === 0) {
+            rulesList.innerHTML = `<div style="color: var(--text-muted); font-size: 0.76rem;">No triggered rules recorded yet.</div>`;
+        } else {
+            rulesList.innerHTML = rules.map(r => `
+                <div class="analytics-rule-item">
+                    <strong style="font-family: var(--font-mono); color: var(--danger);">${r.rule_id}</strong>
+                    <span>${r.count} blocks</span>
+                </div>
+            `).join('');
+        }
+    }
+
+    // 3. Active client IPs
     const ipsList = document.getElementById('analytics-top-ips');
     if (ipsList) {
         const ips = analytics.top_ips || [];
@@ -517,8 +918,11 @@ function renderThreatAnalytics(analytics) {
 // ---- Charts ----
 function initCharts() {
     const c = getThemeColors();
+    const trafficCanvas = document.getElementById('trafficChart');
+    const threatCanvas = document.getElementById('threatCategoryChart');
+    if (!trafficCanvas || !threatCanvas) return;
 
-    trafficChartInstance = new Chart(document.getElementById('trafficChart').getContext('2d'), {
+    trafficChartInstance = new Chart(trafficCanvas.getContext('2d'), {
         type: 'line',
         data: {
             labels: ['-60s', '-50s', '-40s', '-30s', '-20s', '-10s', 'Now'],
@@ -556,12 +960,12 @@ function initCharts() {
         }
     });
 
-    threatChartInstance = new Chart(document.getElementById('threatCategoryChart').getContext('2d'), {
+    threatChartInstance = new Chart(threatCanvas.getContext('2d'), {
         type: 'doughnut',
         data: {
             labels: ['OWASP Top 10', 'API Security', 'Bot Protection'],
             datasets: [{
-                data: [15, 7, 6], // default active rule distribution
+                data: [15, 7, 6],
                 backgroundColor: ['#0075FF', '#7928CA', '#01B574'],
                 borderWidth: 2,
                 borderColor: '#060B26',
@@ -582,8 +986,6 @@ function initCharts() {
 }
 
 // ---- Telemetry & Counter Animations ----
-let isInitialTelemetryLoad = true;
-
 function animateNumber(elementId, targetValue, duration = 1200, suffix = '') {
     const el = document.getElementById(elementId);
     if (!el) return;
@@ -620,7 +1022,8 @@ function animateNumber(elementId, targetValue, duration = 1200, suffix = '') {
 
 async function pollTelemetry() {
     try {
-        const res = await fetch('/api/stats');
+        const res = await authFetch('/api/stats');
+        if (!res.ok) return;
         const stats = await res.json();
 
         if (isInitialTelemetryLoad) {
@@ -639,58 +1042,33 @@ async function pollTelemetry() {
         const pct = stats.total_requests > 0 ? ((stats.blocked_attacks / stats.total_requests) * 100).toFixed(1) : '0';
         document.getElementById('stat-block-pct').textContent = pct + '%';
 
-        // Real traffic from database timeline
         if (trafficChartInstance && stats.traffic) {
             trafficChartInstance.data.datasets[0].data = stats.traffic.clean;
             trafficChartInstance.data.datasets[1].data = stats.traffic.blocked;
             trafficChartInstance.update('none');
         }
 
-        // Real threat categories from database
         if (threatChartInstance && stats.categories) {
-            const catBadge = document.getElementById('category-chart-badge');
-            const tc = stats.categories.threat_counts || {};
-            const rc = stats.categories.rule_counts || { 'OWASP Top 10': 15, 'API Security': 7, 'Bot Protection': 6 };
-            const totalThreats = stats.categories.total_threats || 0;
-
-            if (totalThreats > 0) {
-                // Show real threats that were blocked
-                threatChartInstance.data.datasets[0].data = [
-                    tc['OWASP Top 10'] || 0,
-                    tc['API Security'] || 0,
-                    tc['Bot Protection'] || 0
-                ];
-                if (catBadge) {
-                    catBadge.textContent = `${totalThreats} Mitigated`;
-                    catBadge.className = 'badge badge-red';
-                }
-            } else {
-                // Show active rules protection suite
-                threatChartInstance.data.datasets[0].data = [
-                    rc['OWASP Top 10'] || 15,
-                    rc['API Security'] || 7,
-                    rc['Bot Protection'] || 6
-                ];
-                if (catBadge) {
-                    catBadge.textContent = '28 Active Rules';
-                    catBadge.className = 'badge badge-purple';
-                }
-            }
+            threatChartInstance.data.datasets[0].data = [
+                stats.categories['OWASP Top 10'] || 0,
+                stats.categories['API Security'] || 0,
+                stats.categories['Bot Protection'] || 0
+            ];
             threatChartInstance.update('none');
         }
 
-        // Real Threat Vectors & Analytics (no geo)
         if (stats.analytics) {
             renderThreatAnalytics(stats.analytics);
         }
 
         fetchRecentEvents();
-    } catch (err) { console.error(err); }
+    } catch (err) {}
 }
 
 async function fetchRecentEvents() {
     try {
-        const res = await fetch('/api/events');
+        const res = await authFetch('/api/events');
+        if (!res.ok) return;
         const events = await res.json();
         const feed = document.getElementById('live-incident-feed');
         if (!feed) return;
@@ -719,7 +1097,8 @@ async function fetchAuditLogs() {
     const threat = document.getElementById('log-threat-type').value;
 
     try {
-        const res = await fetch(`/api/logs?q=${encodeURIComponent(query)}&threat=${encodeURIComponent(threat)}`);
+        const res = await authFetch(`/api/logs?q=${encodeURIComponent(query)}&threat=${encodeURIComponent(threat)}`);
+        if (!res.ok) return;
         const logs = await res.json();
         const tbody = document.getElementById('audit-log-body');
 
@@ -762,14 +1141,24 @@ function inspectPayload(encodedJson) {
     } catch (e) { console.error(e); }
 }
 
-async function clearAuditLogs() {
-    if (!confirm('Clear all security logs?')) return;
+function clearAuditLogs() {
+    openModal('confirmClearModal');
+}
+
+async function executeClearLogs() {
+    closeModal('confirmClearModal');
     try {
-        await fetch('/api/logs/clear', { method: 'POST' });
-        fetchAuditLogs();
-        pollTelemetry();
-        showToast('Logs cleared');
-    } catch (err) { console.error(err); }
+        const res = await authFetch('/api/logs/clear', { method: 'POST' });
+        if (res.ok) {
+            fetchAuditLogs();
+            pollTelemetry();
+            showToast('All security logs cleared');
+        } else {
+            showToast('Failed to clear logs');
+        }
+    } catch (err) {
+        showToast('Error clearing logs');
+    }
 }
 
 function exportLogsCsv() {
@@ -779,7 +1168,8 @@ function exportLogsCsv() {
 // ---- System ----
 async function fetchSystem() {
     try {
-        const res = await fetch('/api/system');
+        const res = await authFetch('/api/system');
+        if (!res.ok) return;
         const data = await res.json();
         document.getElementById('sys-cpu').textContent = data.cpu_percent + '%';
         document.getElementById('sys-ram').textContent = data.ram_used_mb + ' MB';
@@ -787,11 +1177,8 @@ async function fetchSystem() {
     } catch (err) { console.error(err); }
 }
 
-// ---- Init ----
+// ---- Initialization ----
 window.addEventListener('DOMContentLoaded', () => {
     restoreTheme();
-    initCharts();
-    fetchRules();
-    pollTelemetry();
-    setInterval(pollTelemetry, 3000);
+    checkAuthStatus();
 });

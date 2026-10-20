@@ -14,6 +14,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from api.auth import auth_router
 from api.server import api_router
 from .config import get_config
 from .engine import Engine
@@ -58,6 +59,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="Bastion WAF Reverse Proxy & Challenge Gateway", lifespan=lifespan)
 engine = Engine()
+app.include_router(auth_router)
 app.include_router(api_router)
 
 dashboard_dir = Path(__file__).resolve().parent.parent.parent / "dashboard"

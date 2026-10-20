@@ -1,6 +1,21 @@
+import pytest
 from fastapi.testclient import TestClient
 from api.server import app as api_app
+from database import db
 from database.db import init_db, get_stats, get_rules, set_rule_state, add_site, get_sites, delete_site, clear_logs
+
+
+@pytest.fixture(autouse=True)
+def clean_test_db(tmp_path, monkeypatch):
+    test_db = tmp_path / "test_proxy_api.db"
+    monkeypatch.setattr(db, "DB_PATH", test_db)
+    db.init_db()
+    yield
+    if test_db.exists():
+        try:
+            test_db.unlink()
+        except Exception:
+            pass
 
 
 def test_database_crud_and_queries():
@@ -30,6 +45,14 @@ def test_database_crud_and_queries():
 
 def test_api_server_endpoints():
     client = TestClient(api_app)
+
+    # Setup administrator to authenticate
+    setup_res = client.post(
+        "/api/auth/setup",
+        json={"email": "tester@bastion.local", "password": "TestAdminSuperSecret123!"},
+    )
+    csrf_token = setup_res.json()["csrf_token"]
+    headers = {"X-CSRF-Token": csrf_token}
 
     res = client.get("/api/stats")
     assert res.status_code == 200

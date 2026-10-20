@@ -78,6 +78,13 @@
                 <div class="topbar-pill">
                     <div class="pulse-dot"></div> Active Blocking
                 </div>
+                <span id="topbar-user-email" style="display: none; font-size: 0.78rem; color: var(--accent); background: var(--bg-card); padding: 4px 10px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-family: var(--font-mono);"></span>
+                <button class="btn btn-outline" style="font-size: 0.76rem;" onclick="openSecurityModal()" id="btn-security" title="Security & 2FA Settings">
+                    Security
+                </button>
+                <button class="btn btn-outline" style="font-size: 0.76rem; border-color: rgba(239, 68, 68, 0.4); color: var(--danger);" onclick="handleLogout()" id="btn-logout" title="Sign out of Bastion">
+                    Logout
+                </button>
                 <button class="btn btn-outline" style="font-size: 0.76rem;" onclick="window.open('http://127.0.0.1:8080', '_blank')">
                     Proxy :8080
                 </button>
@@ -449,6 +456,179 @@
                 <li class="cmd-item" onclick="execCmd('logs')"><span>Audit Logs</span> <span class="kbd">5</span></li>
                 <li class="cmd-item" onclick="execCmd('clear-logs')"><span class="text-danger">Clear Logs</span></li>
             </ul>
+        </div>
+    </div>
+
+    <!-- MODAL: Confirmation for Clear Logs -->
+    <div class="modal-backdrop" id="confirmClearModal" onclick="if(event.target===this) closeModal('confirmClearModal')">
+        <div class="modal-box" style="max-width: 420px; border-color: rgba(239, 68, 68, 0.4);">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 style="color: var(--danger); display: flex; align-items: center; gap: 8px;">
+                    <span>⚠️</span> Clear Security Audit Logs
+                </h3>
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 1.1rem; line-height: 1;" onclick="closeModal('confirmClearModal')">&times;</button>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-secondary); line-height: 1.5; margin-bottom: 18px;">
+                Are you sure you want to permanently delete all recorded threat events and proxy logs? This administrative action is permanently recorded in the audit trail.
+            </p>
+            <div style="display: flex; justify-content: flex-end; gap: 10px;">
+                <button class="btn btn-outline" onclick="closeModal('confirmClearModal')">Cancel</button>
+                <button class="btn btn-danger" onclick="executeClearLogs()">Confirm &amp; Clear</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- MODAL: Authentication & Admin Onboarding Overlay -->
+    <div class="modal-backdrop" id="authModal" style="z-index: 9999; backdrop-filter: blur(8px);">
+        <div class="modal-box" style="max-width: 440px; border-color: var(--accent); box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);">
+            <div style="text-align: center; margin-bottom: 20px;">
+                <img src="logo.svg" alt="Bastion" style="width: 52px; height: 52px; margin-bottom: 8px;">
+                <h2 id="auth-title" style="color: var(--text-primary); font-size: 1.35rem; font-weight: 700;">Bastion Security Login</h2>
+                <p id="auth-subtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-top: 4px;">Enter your administrator credentials to access the SOC gateway.</p>
+            </div>
+
+            <!-- Error/Notice Alert -->
+            <div id="auth-alert" style="display: none; padding: 10px 12px; border-radius: var(--radius-sm); font-size: 0.8rem; margin-bottom: 14px; background: rgba(239, 68, 68, 0.15); border: 1px solid var(--danger); color: #fca5a5;"></div>
+
+            <!-- Primary Login / First-Run Setup Form -->
+            <form id="auth-primary-form" onsubmit="handleAuthSubmit(event)" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Username or Email</label>
+                    <input type="text" id="auth-email" class="form-control" style="width: 100%; font-family: var(--font-mono);" placeholder="admin" required autocomplete="username">
+                </div>
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <label style="font-size: 0.78rem; color: var(--text-muted);">Password</label>
+                        <a href="javascript:void(0)" onclick="toggleForgotPassword(true)" id="link-forgot-pwd" style="font-size: 0.74rem; color: var(--accent); text-decoration: none;">Forgot?</a>
+                    </div>
+                    <input type="password" id="auth-password" class="form-control" style="width: 100%; font-family: var(--font-mono);" placeholder="••••••••••••" required autocomplete="current-password">
+                </div>
+                <button type="submit" id="auth-submit-btn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px; margin-top: 4px; font-weight: 600;">
+                    Authenticate
+                </button>
+            </form>
+
+            <!-- 2FA TOTP Challenge View -->
+            <form id="auth-2fa-form" onsubmit="handleTwoFactorSubmit(event)" style="display: none; flex-direction: column; gap: 14px;">
+                <div style="background: var(--bg-input); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--border); font-size: 0.8rem; color: var(--text-secondary); text-align: center;">
+                    🔐 An authenticator code is required for this account.
+                </div>
+                <div>
+                    <label id="label-2fa-code" style="font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 6px;">6-Digit Authenticator Code</label>
+                    <input type="text" id="auth-2fa-code" class="form-control" style="width: 100%; font-family: var(--font-mono); font-size: 1.2rem; letter-spacing: 0.25em; text-align: center;" placeholder="123456" maxlength="9" required autocomplete="one-time-code">
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <a href="javascript:void(0)" onclick="toggleRecoveryMode()" id="link-recovery" style="font-size: 0.74rem; color: var(--accent); text-decoration: none;">Use 8-character recovery code</a>
+                    <a href="javascript:void(0)" onclick="resetAuthForm()" style="font-size: 0.74rem; color: var(--text-muted); text-decoration: none;">Back to login</a>
+                </div>
+                <button type="submit" id="auth-2fa-btn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px; font-weight: 600;">
+                    Verify &amp; Sign In
+                </button>
+            </form>
+
+            <!-- Forgot Password Request Form -->
+            <form id="auth-forgot-form" onsubmit="handleForgotSubmit(event)" style="display: none; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="font-size: 0.78rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Registered Administrator Email</label>
+                    <input type="email" id="auth-forgot-email" class="form-control" style="width: 100%; font-family: var(--font-mono);" placeholder="admin@bastion.local" required>
+                </div>
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <a href="javascript:void(0)" onclick="toggleForgotPassword(false)" style="font-size: 0.74rem; color: var(--text-muted); text-decoration: none;">Back to login</a>
+                </div>
+                <button type="submit" id="auth-forgot-btn" class="btn btn-primary" style="width: 100%; justify-content: center; padding: 10px; font-weight: 600;">
+                    Send Reset Token
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Security & 2FA Settings -->
+    <div class="modal-backdrop" id="securityModal" onclick="if(event.target===this) closeModal('securityModal')">
+        <div class="modal-box" style="max-width: 540px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="color: var(--accent); display: flex; align-items: center; gap: 8px;">
+                    <span>🛡️</span> Security &amp; Credentials
+                </h3>
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 1.1rem; line-height: 1;" onclick="closeModal('securityModal')">&times;</button>
+            </div>
+
+            <!-- Two-Factor Authentication Section -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px; margin-bottom: 18px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                    <div>
+                        <h4 style="font-size: 0.92rem; color: var(--text-primary); font-weight: 600;">Two-Factor Authentication (TOTP)</h4>
+                        <p style="font-size: 0.76rem; color: var(--text-muted); margin-top: 2px;">RFC 6238 compatible (Google Authenticator, Bitwarden, 1Password).</p>
+                    </div>
+                    <span id="totp-status-badge" class="badge badge-purple">Checking…</span>
+                </div>
+
+                <div id="totp-disabled-container" style="display: none; margin-top: 12px;">
+                    <button class="btn btn-outline" onclick="initiate2FASetup()" style="font-size: 0.8rem;">
+                        Set Up Authenticator App
+                    </button>
+                </div>
+
+                <div id="totp-setup-flow" style="display: none; margin-top: 14px; border-top: 1px solid var(--border); padding-top: 14px;">
+                    <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 8px;">
+                        1. Copy this secret key into your authenticator app:
+                    </p>
+                    <div style="display: flex; gap: 8px; margin-bottom: 12px;">
+                        <input type="text" id="totp-secret-key" readonly class="form-control" style="font-family: var(--font-mono); font-size: 0.82rem; background: var(--bg-input);">
+                        <button class="btn btn-outline" onclick="copyTotpSecret()" style="font-size: 0.76rem;">Copy</button>
+                    </div>
+                    <p style="font-size: 0.78rem; color: var(--text-secondary); margin-bottom: 6px;">
+                        2. Enter the 6-digit code shown in your app to confirm:
+                    </p>
+                    <div style="display: flex; gap: 8px;">
+                        <input type="text" id="totp-confirm-code" placeholder="123456" maxlength="6" class="form-control" style="font-family: var(--font-mono); width: 140px; letter-spacing: 0.15em; text-align: center;">
+                        <button class="btn btn-primary" onclick="confirm2FAEnable()" style="font-size: 0.78rem;">Verify &amp; Enable</button>
+                    </div>
+                </div>
+
+                <div id="totp-enabled-container" style="display: none; margin-top: 12px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between;">
+                        <span style="font-size: 0.78rem; color: var(--success);">Two-factor authentication is active.</span>
+                        <button class="btn btn-outline" onclick="initiate2FADisable()" style="font-size: 0.74rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.4);">
+                            Disable 2FA
+                        </button>
+                    </div>
+                    <div id="totp-disable-form" style="display: none; margin-top: 12px; border-top: 1px solid var(--border); padding-top: 10px;">
+                        <label style="font-size: 0.74rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Confirm password to disable 2FA:</label>
+                        <div style="display: flex; gap: 8px;">
+                            <input type="password" id="totp-disable-pwd" class="form-control" placeholder="••••••••••••" style="flex: 1;">
+                            <button class="btn btn-danger" onclick="confirm2FADisable()" style="font-size: 0.76rem;">Confirm</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Recovery Codes Display -->
+                <div id="recovery-codes-display" style="display: none; margin-top: 14px; background: var(--bg-input); padding: 12px; border-radius: var(--radius-sm); border: 1px solid var(--warning);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <strong style="color: var(--warning); font-size: 0.8rem;">⚠️ Save Your Recovery Codes</strong>
+                        <button class="btn btn-outline" onclick="copyRecoveryCodes()" style="padding: 2px 8px; font-size: 0.72rem;">Copy All</button>
+                    </div>
+                    <p style="font-size: 0.74rem; color: var(--text-muted); margin-bottom: 8px;">Each code can be used once if you lose access to your authenticator app.</p>
+                    <div id="recovery-codes-grid" style="display: grid; grid-template-columns: 1fr 1fr; gap: 4px; font-family: var(--font-mono); font-size: 0.78rem; color: var(--accent);"></div>
+                </div>
+            </div>
+
+            <!-- Password Change Section -->
+            <div style="background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 16px;">
+                <h4 style="font-size: 0.92rem; color: var(--text-primary); font-weight: 600; margin-bottom: 12px;">Change Administrator Password</h4>
+                <form onsubmit="event.preventDefault(); handleChangePassword();" style="display: flex; flex-direction: column; gap: 10px;">
+                    <div>
+                        <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 4px;">Current Password</label>
+                        <input type="password" id="pwd-current" class="form-control" style="width: 100%;" required>
+                    </div>
+                    <div>
+                        <label style="font-size: 0.76rem; color: var(--text-muted); display: block; margin-bottom: 4px;">New Password (min 12 characters)</label>
+                        <input type="password" id="pwd-new" class="form-control" style="width: 100%;" required minlength="12">
+                    </div>
+                    <div style="display: flex; justify-content: flex-end; margin-top: 6px;">
+                        <button type="submit" class="btn btn-primary" style="font-size: 0.78rem;">Update Password</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 
