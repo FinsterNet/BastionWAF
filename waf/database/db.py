@@ -269,6 +269,18 @@ def init_db():
                 ip VARCHAR(64),
                 timestamp VARCHAR(64)
             );
+
+            CREATE TABLE IF NOT EXISTS ip_access_rules (
+                id BIGSERIAL PRIMARY KEY,
+                cidr VARCHAR(64) NOT NULL,
+                rule_type VARCHAR(16) NOT NULL,
+                reason VARCHAR(255) DEFAULT '',
+                penalty_score DOUBLE PRECISION DEFAULT 0.0,
+                expires_at DOUBLE PRECISION DEFAULT NULL,
+                created_at VARCHAR(64) NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ip_rules_type ON ip_access_rules (rule_type);
+            CREATE INDEX IF NOT EXISTS idx_ip_rules_cidr ON ip_access_rules (cidr);
             """)
         else:
             Path(DB_PATH).parent.mkdir(parents=True, exist_ok=True)
@@ -368,6 +380,18 @@ def init_db():
                 ip TEXT,
                 timestamp TEXT
             );
+
+            CREATE TABLE IF NOT EXISTS ip_access_rules (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                cidr TEXT NOT NULL,
+                rule_type TEXT NOT NULL,
+                reason TEXT DEFAULT '',
+                penalty_score REAL DEFAULT 0.0,
+                expires_at REAL DEFAULT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_ip_rules_type ON ip_access_rules (rule_type);
+            CREATE INDEX IF NOT EXISTS idx_ip_rules_cidr ON ip_access_rules (cidr);
             """)
 
         # Seed default rules safely using standard SQL ON CONFLICT
@@ -421,7 +445,7 @@ def migrate_sqlite_to_postgres(sqlite_path: Optional[str] = None, pg_url: Option
     if target_url.startswith("sqlite"):
         return False, "Target database URL is SQLite, expected PostgreSQL", {}
 
-    counts = {"users": 0, "waf_rules": 0, "protected_sites": 0, "audit_actions": 0}
+    counts = {"users": 0, "waf_rules": 0, "protected_sites": 0, "audit_actions": 0, "ip_access_rules": 0}
 
     try:
         # 1. Read records from SQLite
@@ -454,6 +478,13 @@ def migrate_sqlite_to_postgres(sqlite_path: Optional[str] = None, pg_url: Option
             try:
                 s_cur.execute("SELECT * FROM audit_actions")
                 audits = [dict(r) for r in s_cur.fetchall()]
+            except Exception:
+                pass
+
+            ip_rules = []
+            try:
+                s_cur.execute("SELECT * FROM ip_access_rules")
+                ip_rules = [dict(r) for r in s_cur.fetchall()]
             except Exception:
                 pass
 
@@ -547,6 +578,29 @@ def migrate_sqlite_to_postgres(sqlite_path: Optional[str] = None, pg_url: Option
             if audits:
                 try:
                     p_conn.execute(text("SELECT setval(pg_get_serial_sequence('audit_actions', 'id'), COALESCE(MAX(id), 1)) FROM audit_actions"))
+                except Exception:
+                    pass
+
+            # IP Access Rules
+            for rule in ip_rules:
+                p_conn.execute(
+                    text("""
+                    INSERT INTO ip_access_rules (id, cidr, rule_type, reason, penalty_score, expires_at, created_at)
+                    VALUES (:id, :cidr, :rule_type, :reason, :penalty_score, :expires_at, :created_at)
+                    ON CONFLICT (id) DO UPDATE SET
+                        cidr = EXCLUDED.cidr,
+                        rule_type = EXCLUDED.rule_type,
+                        reason = EXCLUDED.reason,
+                        penalty_score = EXCLUDED.penalty_score,
+                        expires_at = EXCLUDED.expires_at
+                    """),
+                    rule,
+                )
+                counts["ip_access_rules"] += 1
+
+            if ip_rules:
+                try:
+                    p_conn.execute(text("SELECT setval(pg_get_serial_sequence('ip_access_rules', 'id'), COALESCE(MAX(id), 1)) FROM ip_access_rules"))
                 except Exception:
                     pass
 
@@ -1461,3 +1515,147 @@ def get_audit_logs(limit: int = 50) -> List[Dict[str, Any]]:
             {"lim": safe_limit},
         ).mappings().fetchall()
         return [dict(r) for r in rows]
+
+
+# ============================================================
+# IP Access Rules & Quarantine
+# ============================================================
+
+def cleanup_expired_ip_rules() -> int:
+    """Purge temporary IP quarantine/access rules whose expires_at timestamp has passed."""
+    now = time.time()
+    with get_engine().begin() as conn:
+        res = conn.execute(
+            text("DELETE FROM ip_access_rules WHERE expires_at IS NOT NULL AND expires_at < :now"),
+            {"now": now},
+        )
+        return res.rowcount or 0
+
+
+def get_ip_rules(rule_type: Optional[str] = None) -> List[Dict[str, Any]]:
+    """Fetch all active IP access rules and quarantines with remaining TTL."""
+    cleanup_expired_ip_rules()
+    now = time.time()
+    query = "SELECT id, cidr, rule_type, reason, penalty_score, expires_at, created_at FROM ip_access_rules"
+    params = {}
+    if rule_type:
+        query += " WHERE rule_type = :rtype"
+        params["rtype"] = str(rule_type).strip().lower()
+    query += " ORDER BY id DESC"
+
+    with get_engine().connect() as conn:
+        rows = conn.execute(text(query), params).mappings().fetchall()
+        results = []
+        for r in rows:
+            d = dict(r)
+            if d.get("expires_at"):
+                d["remaining_seconds"] = max(0, int(d["expires_at"] - now))
+            else:
+                d["remaining_seconds"] = None
+            results.append(d)
+        return results
+
+
+def get_active_ip_rules() -> List[Dict[str, Any]]:
+    """Fetch all active rules for fast inline inspection evaluation."""
+    now = time.time()
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, cidr, rule_type, reason, expires_at FROM ip_access_rules WHERE expires_at IS NULL OR expires_at >= :now"),
+            {"now": now},
+        ).mappings().fetchall()
+        return [dict(r) for r in rows]
+
+
+def add_ip_rule(
+    cidr: str,
+    rule_type: str,
+    reason: str = "",
+    duration_seconds: Optional[float] = None,
+    penalty_score: float = 0.0,
+) -> int:
+    """
+    Insert an IP access control or quarantine rule.
+    Validates and normalizes CIDR notation.
+    """
+    import ipaddress
+    clean_type = str(rule_type).strip().lower()
+    if clean_type not in ("whitelist", "blacklist", "quarantine"):
+        raise ValueError(f"Invalid rule_type: {rule_type}")
+
+    net = ipaddress.ip_network(cidr.strip(), strict=False)
+    canonical_cidr = str(net)
+
+    now = time.time()
+    expires_at = (now + float(duration_seconds)) if duration_seconds and duration_seconds > 0 else None
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    with get_engine().begin() as conn:
+        # Check if identical active rule exists to avoid duplicates
+        existing = conn.execute(
+            text("SELECT id FROM ip_access_rules WHERE cidr = :cidr AND rule_type = :rtype"),
+            {"cidr": canonical_cidr, "rtype": clean_type},
+        ).scalar()
+
+        if existing:
+            conn.execute(
+                text("""
+                UPDATE ip_access_rules
+                SET reason = :reason, penalty_score = :score, expires_at = :expires_at, created_at = :now_iso
+                WHERE id = :id
+                """),
+                {
+                    "id": existing,
+                    "reason": reason[:254],
+                    "score": float(penalty_score),
+                    "expires_at": expires_at,
+                    "now_iso": now_iso,
+                },
+            )
+            return int(existing)
+
+        is_pg = is_postgres()
+        if is_pg:
+            res = conn.execute(
+                text("""
+                INSERT INTO ip_access_rules (cidr, rule_type, reason, penalty_score, expires_at, created_at)
+                VALUES (:cidr, :rtype, :reason, :score, :expires_at, :now_iso)
+                RETURNING id
+                """),
+                {
+                    "cidr": canonical_cidr,
+                    "rtype": clean_type,
+                    "reason": reason[:254],
+                    "score": float(penalty_score),
+                    "expires_at": expires_at,
+                    "now_iso": now_iso,
+                },
+            )
+            return int(res.scalar_one())
+        else:
+            conn.execute(
+                text("""
+                INSERT INTO ip_access_rules (cidr, rule_type, reason, penalty_score, expires_at, created_at)
+                VALUES (:cidr, :rtype, :reason, :score, :expires_at, :now_iso)
+                """),
+                {
+                    "cidr": canonical_cidr,
+                    "rtype": clean_type,
+                    "reason": reason[:254],
+                    "score": float(penalty_score),
+                    "expires_at": expires_at,
+                    "now_iso": now_iso,
+                },
+            )
+            res = conn.execute(text("SELECT last_insert_rowid()")).scalar()
+            return int(res)
+
+
+def delete_ip_rule(rule_id: int) -> bool:
+    """Delete an IP rule or release an IP from quarantine."""
+    with get_engine().begin() as conn:
+        res = conn.execute(
+            text("DELETE FROM ip_access_rules WHERE id = :id"),
+            {"id": int(rule_id)},
+        )
+        return (res.rowcount or 0) > 0

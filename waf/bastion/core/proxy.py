@@ -16,11 +16,17 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api.auth import auth_router, get_allowed_origins, require_auth
+from api.auth import auth_router, get_allowed_origins, get_client_ip, require_auth
 from api.server import api_router
 from .config import get_config
 from .engine import Engine
 from .inspector import inspect_request
+from .reputation import (
+    PENALTY_BOT_CHALLENGE,
+    PENALTY_CRITICAL_BLOCK,
+    check_ip_access,
+    record_penalty,
+)
 from .scorer import ActionDecision
 from ..challenge.captcha import (
     CLEARANCE_COOKIE_NAME,
@@ -235,10 +241,57 @@ async def run_waf_inspection(
     query_string = request.url.query
     headers = dict(request.headers)
     cookies = dict(request.cookies)
-    client_ip = request.client.host if request.client else "127.0.0.1"
+    client_ip = get_client_ip(request)
     host_header = request.headers.get("host", "127.0.0.1:8080")
 
     upstream_target, defense_active = resolve_upstream_and_mode(host_header)
+
+    # Pre-WAF IP Access Control: Whitelist bypass / Blacklist & Quarantine drop
+    ip_action, ip_reason, retry_after = check_ip_access(client_ip)
+    if ip_action == "allow":
+        return None, None, False, client_ip, host_header, upstream_target
+
+    if ip_action == "block":
+        headers_out = {}
+        if retry_after is not None:
+            headers_out["Retry-After"] = str(retry_after)
+            headers_out["X-Bastion-Quarantine"] = "active"
+        else:
+            headers_out["X-Bastion-Blacklist"] = "active"
+
+        rule_label = "IP_QUARANTINE_DROP" if retry_after is not None else "IP_BLACKLIST_DROP"
+        log_event(
+            client_ip=client_ip,
+            method=request.method,
+            path=target_path,
+            blocked=True,
+            rule_id=rule_label,
+            reason=ip_reason or "IP Access Denied",
+            action="403 Blocked (Pre-WAF)",
+            payload_snippet="Pre-WAF Drop",
+            rule_score=100.0,
+            semantic_score=0.0,
+            total_score=100.0,
+        )
+        return (
+            Response(
+                content=json.dumps({
+                    "blocked": True,
+                    "rule": rule_label,
+                    "reason": ip_reason or "IP Access Denied",
+                    "status": 403,
+                    "retry_after": retry_after,
+                }),
+                status_code=403,
+                media_type="application/json",
+                headers=headers_out,
+            ),
+            None,
+            defense_active,
+            client_ip,
+            host_header,
+            upstream_target,
+        )
 
     inspection = inspect_request(
         method=request.method,
@@ -314,6 +367,7 @@ async def run_waf_inspection(
         return None, scored, defense_active, client_ip, host_header, upstream_target
 
     if effective_action == ActionDecision.BLOCK:
+        record_penalty(client_ip, PENALTY_CRITICAL_BLOCK, scored.primary_reason or "WAF Critical Block")
         log_event(
             client_ip=client_ip,
             method=request.method,
@@ -344,6 +398,7 @@ async def run_waf_inspection(
         )
 
     if effective_action == ActionDecision.CHALLENGE:
+        record_penalty(client_ip, PENALTY_BOT_CHALLENGE, scored.primary_reason or "Suspicious Bot Challenge")
         log_event(
             client_ip=client_ip,
             method=request.method,
@@ -579,12 +634,12 @@ async def waf_proxy(request: Request, path: str):
         "headers": filtered_headers,
         "body_received": body_text[:1000] if body_text else None,
         "inspection": {
-            "verdict": "CLEAN",
-            "anomaly_score": scored.total_score,
-            "rule_score": scored.rule_score,
-            "semantic_score": scored.semantic_score,
-            "threat_category": scored.semantic_category or "None",
-            "message": "Request inspected and passed all active semantic and OWASP security rules.",
+            "verdict": "CLEAN" if (scored is None or scored.total_score < 40) else "WHITELIST_BYPASS",
+            "anomaly_score": scored.total_score if scored else 0.0,
+            "rule_score": scored.rule_score if scored else 0.0,
+            "semantic_score": scored.semantic_score if scored else 0.0,
+            "threat_category": (scored.semantic_category if scored else None) or "None",
+            "message": "Request inspected and passed all active semantic and OWASP security rules." if scored else "Whitelisted IP/CIDR network bypass.",
         },
     }
     return JSONResponse(content=echo_payload, status_code=200)

@@ -16,6 +16,8 @@ from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+import ipaddress
+
 from api.auth import (
     auth_router,
     get_allowed_origins,
@@ -27,13 +29,17 @@ from api.auth import (
 from bastion.core.config import get_config
 from bastion.core.engine import Engine
 from bastion.core.inspector import inspect_request
+from bastion.core.reputation import check_ip_access, get_reputation_score, invalidate_rules_cache
 from database.db import (
+    add_ip_rule,
     add_site,
     clear_logs,
+    delete_ip_rule,
     delete_site,
     export_logs_csv,
     get_audit_logs,
     get_enabled_rule_ids,
+    get_ip_rules,
     get_logs,
     get_recent_events,
     get_rules,
@@ -95,6 +101,13 @@ class SiteToggleRequest(BaseModel):
     defense_mode: Optional[bool] = None
     domain: Optional[str] = Field(None, max_length=253, pattern=DOMAIN_REGEX)
     upstream: Optional[str] = Field(None, max_length=253, pattern=UPSTREAM_REGEX)
+
+
+class IPRuleCreateRequest(BaseModel):
+    cidr: str = Field(..., max_length=64, description="IPv4/IPv6 address or CIDR subnet (e.g. 192.168.1.100 or 10.0.0.0/8)")
+    rule_type: str = Field(..., pattern=r"^(whitelist|blacklist|quarantine)$")
+    reason: str = Field(default="", max_length=255)
+    duration_seconds: Optional[int] = Field(default=None, ge=1, le=2592000)
 
 
 # ============================================================
@@ -229,6 +242,109 @@ def remove_site(
         get_client_ip(request),
     )
     return {"status": "success", "action": "deleted", "site_id": site_id}
+
+
+# ============================================================
+# IP Access Control & Quarantine Endpoints
+# ============================================================
+
+@api_router.get("/api/ip-rules")
+def list_ip_rules(
+    rule_type: Optional[str] = Query(None, pattern=r"^(whitelist|blacklist|quarantine)$"),
+    session: Dict[str, Any] = Depends(require_auth),
+):
+    """List active IP access rules and quarantines with remaining TTL."""
+    return get_ip_rules(rule_type=rule_type)
+
+
+@api_router.post("/api/ip-rules")
+def create_ip_rule(
+    req: IPRuleCreateRequest,
+    request: Request,
+    session: Dict[str, Any] = Depends(require_auth),
+):
+    """Add a whitelist, blacklist, or temporary quarantine rule."""
+    verify_csrf_or_abort(request, session)
+    try:
+        net = ipaddress.ip_network(req.cidr.strip(), strict=False)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid IP address or CIDR format: '{req.cidr}'",
+        )
+
+    rule_id = add_ip_rule(
+        cidr=str(net),
+        rule_type=req.rule_type,
+        reason=req.reason,
+        duration_seconds=req.duration_seconds,
+    )
+    invalidate_rules_cache()
+
+    log_audit_action(
+        session["user_id"],
+        session["email"],
+        "IP_RULE_CREATED",
+        f"Created {req.rule_type} rule for {str(net)} (duration={req.duration_seconds}s)",
+        get_client_ip(request),
+    )
+    return {
+        "status": "success",
+        "rule_id": rule_id,
+        "cidr": str(net),
+        "rule_type": req.rule_type,
+        "duration_seconds": req.duration_seconds,
+    }
+
+
+@api_router.delete("/api/ip-rules/{rule_id}")
+def remove_ip_rule(
+    rule_id: int = ApiPath(..., ge=1, description="IP rule ID"),
+    request: Request = None,
+    session: Dict[str, Any] = Depends(require_auth),
+):
+    """Delete an IP rule or release an IP from quarantine."""
+    verify_csrf_or_abort(request, session)
+    success = delete_ip_rule(rule_id)
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="IP rule not found or already expired",
+        )
+    invalidate_rules_cache()
+    log_audit_action(
+        session["user_id"],
+        session["email"],
+        "IP_RULE_DELETED",
+        f"Deleted IP rule ID {rule_id}",
+        get_client_ip(request),
+    )
+    return {"status": "success", "message": f"Rule {rule_id} deleted successfully"}
+
+
+@api_router.get("/api/ip-reputation/{ip}")
+def inspect_ip_reputation(
+    ip: str = ApiPath(..., max_length=64),
+    session: Dict[str, Any] = Depends(require_auth),
+):
+    """Retrieve current reputation penalty score and access status for an IP."""
+    try:
+        ipaddress.ip_address(ip.strip())
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Invalid IP address format: '{ip}'",
+        )
+
+    score = get_reputation_score(ip.strip())
+    action, reason, remaining = check_ip_access(ip.strip())
+    return {
+        "ip": ip.strip(),
+        "reputation_score": score,
+        "status": action,
+        "reason": reason,
+        "remaining_seconds": remaining,
+    }
 
 
 @api_router.get("/api/system")

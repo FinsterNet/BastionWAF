@@ -125,6 +125,10 @@
             <li class="nav-item" onclick="switchNav('logs', this)">
                 Audit Logs
             </li>
+            <li class="nav-item" onclick="switchNav('access-control', this)">
+                Access Control
+                <span class="nav-badge" id="ip-rules-badge">0</span>
+            </li>
             <li class="nav-item" onclick="switchNav('system', this)">
                 System
             </li>
@@ -503,6 +507,54 @@
                 </div>
             </div>
 
+            <!-- ACCESS CONTROL & QUARANTINE -->
+            <div id="pane-access-control" class="tab-pane">
+                <div class="bento-card">
+                    <div class="card-title-bar" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                        <div>
+                            <h2>IP Access Control & Dynamic Quarantine</h2>
+                            <p style="color: var(--text-muted); font-size: 0.85rem; margin-top: 4px;">
+                                Manage network whitelist bypasses, blacklisted subnets, and monitor auto-quarantined aggressive attackers.
+                            </p>
+                        </div>
+                        <button class="btn btn-primary" onclick="openAddIPRuleModal()">+ Add IP / CIDR Rule</button>
+                    </div>
+
+                    <div class="metrics-grid" style="grid-template-columns: repeat(3, 1fr); margin-bottom: 20px;">
+                        <div class="bento-card">
+                            <div class="metric-header"><span>Active Quarantines</span></div>
+                            <div class="metric-value text-danger" id="metric-quarantine-count">0</div>
+                        </div>
+                        <div class="bento-card">
+                            <div class="metric-header"><span>Blacklisted Subnets</span></div>
+                            <div class="metric-value text-warning" id="metric-blacklist-count">0</div>
+                        </div>
+                        <div class="bento-card">
+                            <div class="metric-header"><span>Whitelisted Networks</span></div>
+                            <div class="metric-value text-success" id="metric-whitelist-count">0</div>
+                        </div>
+                    </div>
+
+                    <div class="table-container">
+                        <table class="data-table">
+                            <thead>
+                                <tr>
+                                    <th>IP / CIDR Subnet</th>
+                                    <th>Policy</th>
+                                    <th>Reason / Infraction</th>
+                                    <th>TTL Remaining</th>
+                                    <th>Created At</th>
+                                    <th>Action</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ip-rules-tbody">
+                                <tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Loading IP access rules…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
         </main>
     </div>
     </div> <!-- /#authenticated-app -->
@@ -552,6 +604,48 @@
                 <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
                     <button type="button" class="btn btn-outline" onclick="closeModal('addSiteModal')">Cancel</button>
                     <button type="submit" class="btn btn-primary">Add Site</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL: Add IP Access Rule -->
+    <div class="modal-backdrop" id="addIPRuleModal" onclick="if(event.target===this) closeModal('addIPRuleModal')">
+        <div class="modal-box" style="max-width: 480px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
+                <h3 style="color: var(--accent);">Add IP Access Rule</h3>
+                <button class="btn btn-outline" style="padding: 2px 8px; font-size: 1.1rem; line-height: 1;" onclick="closeModal('addIPRuleModal')">&times;</button>
+            </div>
+            <form onsubmit="event.preventDefault(); submitNewIPRule();" style="display: flex; flex-direction: column; gap: 14px;">
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 6px;">IP Address or CIDR Subnet</label>
+                    <input type="text" id="newRuleCidr" class="form-control" style="width: 100%;" placeholder="e.g. 198.51.100.25 or 10.0.0.0/8" required>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Policy Action</label>
+                    <select id="newRuleType" class="form-control" style="width: 100%;">
+                        <option value="blacklist">Blacklist (Immediate 403 Drop)</option>
+                        <option value="whitelist">Whitelist (Bypass WAF Inspection)</option>
+                        <option value="quarantine">Quarantine (Temporary Ban)</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Duration</label>
+                    <select id="newRuleDuration" class="form-control" style="width: 100%;">
+                        <option value="permanent">Permanent (No expiration)</option>
+                        <option value="900">15 Minutes</option>
+                        <option value="3600">1 Hour</option>
+                        <option value="86400">24 Hours</option>
+                        <option value="604800">7 Days</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size: 0.8rem; color: var(--text-muted); display: block; margin-bottom: 6px;">Reason</label>
+                    <input type="text" id="newRuleReason" class="form-control" style="width: 100%;" placeholder="e.g. Aggressive SQLi scanner or trusted internal monitoring">
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 8px;">
+                    <button type="button" class="btn btn-outline" onclick="closeModal('addIPRuleModal')">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Save Rule</button>
                 </div>
             </form>
         </div>

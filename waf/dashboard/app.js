@@ -109,6 +109,7 @@ function switchNav(tabId, el) {
         fetchAuditLogs();
         fetchAdminAuditLogs();
     }
+    if (tabId === 'access-control') fetchIPRules();
     if (tabId === 'system') fetchSystem();
 }
 
@@ -359,6 +360,7 @@ function onAuthSuccess(user, csrfToken) {
         initCharts();
     }
     fetchRules();
+    fetchIPRules();
     pollTelemetry();
 
     if (!telemetryTimer) {
@@ -1341,6 +1343,130 @@ async function fetchSystem() {
         document.getElementById('sys-ram').textContent = data.ram_used_mb + ' MB';
         document.getElementById('sys-uptime').textContent = data.uptime;
     } catch (err) { console.error(err); }
+}
+
+// ---- Access Control & IP Quarantine ----
+async function fetchIPRules() {
+    try {
+        const res = await authFetch('/api/ip-rules');
+        if (!res.ok) return;
+        const rules = await res.json();
+
+        // Calculate counts
+        const quarantines = rules.filter(r => r.rule_type === 'quarantine').length;
+        const blacklists = rules.filter(r => r.rule_type === 'blacklist').length;
+        const whitelists = rules.filter(r => r.rule_type === 'whitelist').length;
+
+        const qEl = document.getElementById('metric-quarantine-count');
+        const bEl = document.getElementById('metric-blacklist-count');
+        const wEl = document.getElementById('metric-whitelist-count');
+        const badgeEl = document.getElementById('ip-rules-badge');
+
+        if (qEl) qEl.textContent = quarantines;
+        if (bEl) bEl.textContent = blacklists;
+        if (wEl) wEl.textContent = whitelists;
+        if (badgeEl) badgeEl.textContent = rules.length;
+
+        const tbody = document.getElementById('ip-rules-tbody');
+        if (!tbody) return;
+
+        if (rules.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 18px;">No active IP access rules or quarantines.</td></tr>';
+            return;
+        }
+
+        tbody.innerHTML = rules.map(r => {
+            let badgeClass = 'badge-yellow';
+            let label = 'Quarantine';
+            if (r.rule_type === 'blacklist') {
+                badgeClass = 'badge-red';
+                label = 'Blacklist';
+            } else if (r.rule_type === 'whitelist') {
+                badgeClass = 'badge-green';
+                label = 'Whitelist';
+            }
+
+            let ttlText = 'Permanent';
+            if (r.remaining_seconds !== null && r.remaining_seconds !== undefined) {
+                const mins = Math.floor(r.remaining_seconds / 60);
+                const secs = r.remaining_seconds % 60;
+                ttlText = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+            }
+
+            return `
+                <tr>
+                    <td style="font-family: var(--font-mono); font-weight: 600; color: var(--accent);">${escapeHtml(r.cidr)}</td>
+                    <td><span class="badge ${badgeClass}">${label}</span></td>
+                    <td style="max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${escapeHtml(r.reason || '—')}</td>
+                    <td style="font-family: var(--font-mono);">${ttlText}</td>
+                    <td style="color: var(--text-muted); font-size: 0.8rem;">${new Date(r.created_at).toLocaleTimeString()}</td>
+                    <td>
+                        <button class="btn btn-outline" style="padding: 2px 8px; font-size: 0.75rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.3);" onclick="deleteIPRule(${r.id})">
+                            ${r.rule_type === 'quarantine' ? 'Unban' : 'Remove'}
+                        </button>
+                    </td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        console.error('Error fetching IP rules:', err);
+    }
+}
+
+function openAddIPRuleModal() {
+    openModal('addIPRuleModal');
+}
+
+async function submitNewIPRule() {
+    const cidr = document.getElementById('newRuleCidr').value.trim();
+    const ruleType = document.getElementById('newRuleType').value;
+    const durVal = document.getElementById('newRuleDuration').value;
+    const reason = document.getElementById('newRuleReason').value.trim();
+
+    if (!cidr) return;
+    const duration_seconds = durVal === 'permanent' ? null : parseInt(durVal, 10);
+
+    try {
+        const res = await authFetch('/api/ip-rules', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                cidr: cidr,
+                rule_type: ruleType,
+                reason: reason,
+                duration_seconds: duration_seconds,
+            }),
+        });
+
+        if (res.ok) {
+            closeModal('addIPRuleModal');
+            document.getElementById('newRuleCidr').value = '';
+            document.getElementById('newRuleReason').value = '';
+            showToast(`Rule for ${cidr} added successfully`);
+            fetchIPRules();
+        } else {
+            const err = await res.json();
+            showToast(err.detail || 'Failed to add IP rule');
+        }
+    } catch (err) {
+        showToast('Network error saving IP rule');
+    }
+}
+
+async function deleteIPRule(ruleId) {
+    try {
+        const res = await authFetch('/api/ip-rules/' + ruleId, {
+            method: 'DELETE',
+        });
+        if (res.ok) {
+            showToast('Rule removed / IP unbanned');
+            fetchIPRules();
+        } else {
+            showToast('Failed to delete rule');
+        }
+    } catch (err) {
+        showToast('Error removing rule');
+    }
 }
 
 // ---- Initialization ----

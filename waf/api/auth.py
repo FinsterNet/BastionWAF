@@ -116,6 +116,8 @@ class ResetConfirmRequest(BaseModel):
 
 def is_ip_in_trusted_proxies(ip_str: str, trusted_list: List[str]) -> bool:
     """Check if an IP string belongs to any trusted proxy IP or CIDR network."""
+    if ip_str in trusted_list:
+        return True
     try:
         ip = ipaddress.ip_address(ip_str)
         for trusted in trusted_list:
