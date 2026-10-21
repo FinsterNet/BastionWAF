@@ -1,5 +1,6 @@
 import pytest
 from fastapi.testclient import TestClient
+from api.auth import reset_rate_limits
 from api.server import app as api_app
 from database import db
 from database.db import init_db, get_stats, get_rules, set_rule_state, add_site, get_sites, delete_site, clear_logs
@@ -9,8 +10,12 @@ from database.db import init_db, get_stats, get_rules, set_rule_state, add_site,
 def clean_test_db(tmp_path, monkeypatch):
     test_db = tmp_path / "test_proxy_api.db"
     monkeypatch.setattr(db, "DB_PATH", test_db)
+    monkeypatch.setenv("BASTION_SETUP_TOKEN", "test-setup-token")
+    monkeypatch.setenv("BASTION_ALLOWED_ORIGINS", "http://testserver,http://localhost:8000")
+    reset_rate_limits()
     db.init_db()
     yield
+    reset_rate_limits()
     if test_db.exists():
         try:
             test_db.unlink()
@@ -49,10 +54,12 @@ def test_api_server_endpoints():
     # Setup administrator to authenticate
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "tester@bastion.local", "password": "TestAdminSuperSecret123!"},
+        json={"email": "tester@bastion.local", "password": "TestAdminSuperSecret123!", "setup_token": "test-setup-token"},
+        headers={"Origin": "http://testserver"},
     )
+    assert setup_res.status_code == 200
     csrf_token = setup_res.json()["csrf_token"]
-    headers = {"X-CSRF-Token": csrf_token}
+    headers = {"Origin": "http://testserver", "X-CSRF-Token": csrf_token}
 
     res = client.get("/api/stats")
     assert res.status_code == 200
@@ -86,6 +93,7 @@ def test_api_server_endpoints():
             "headers": {},
             "client_ip": "10.0.0.1",
         },
+        headers=headers,
     )
     assert sim_res.status_code == 200
     assert sim_res.json()["blocked"] is True

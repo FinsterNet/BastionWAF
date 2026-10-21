@@ -9,7 +9,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from api.auth import SESSION_COOKIE_NAME
+from api.auth import SESSION_COOKIE_NAME, reset_rate_limits
 from api.server import app
 from database import db
 from database.db import (
@@ -29,9 +29,13 @@ def clean_test_database(tmp_path, monkeypatch):
     """Ensure isolated test database for each test run."""
     test_db = tmp_path / "test_val_waf.db"
     monkeypatch.setattr(db, "DB_PATH", test_db)
+    monkeypatch.setenv("BASTION_SETUP_TOKEN", "test-setup-token")
+    monkeypatch.setenv("BASTION_ALLOWED_ORIGINS", "http://testserver,http://localhost:8000")
+    reset_rate_limits()
     reset_engine()
     init_db()
     yield
+    reset_rate_limits()
     reset_engine()
     if test_db.exists():
         try:
@@ -50,7 +54,8 @@ def authenticated_admin(client):
     """Create an administrator account and return session cookie + csrf token."""
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.test", "password": "SecurePassword12345!"},
+        json={"email": "admin@bastion.test", "password": "SecurePassword12345!", "setup_token": "test-setup-token"},
+        headers={"Origin": "http://testserver"},
     )
     assert setup_res.status_code == 200
     cookie_val = setup_res.cookies.get(SESSION_COOKIE_NAME)
@@ -167,7 +172,7 @@ def test_add_site_accepts_valid_domain_and_upstream(client, authenticated_admin)
             "upstream": "https://backend.internal.net:8080",
         },
         cookies={SESSION_COOKIE_NAME: authenticated_admin["cookie"]},
-        headers={"X-CSRF-Token": authenticated_admin["csrf"]},
+        headers={"Origin": "http://testserver", "X-CSRF-Token": authenticated_admin["csrf"]},
     )
     assert res.status_code == 200
     assert res.json()["status"] == "success"
@@ -211,7 +216,7 @@ def test_rule_toggle_accepts_valid_id(client, authenticated_admin):
         "/api/rules",
         json={"rule_id": "942100", "enabled": False},
         cookies={SESSION_COOKIE_NAME: authenticated_admin["cookie"]},
-        headers={"X-CSRF-Token": authenticated_admin["csrf"]},
+        headers={"Origin": "http://testserver", "X-CSRF-Token": authenticated_admin["csrf"]},
     )
     assert res.status_code == 200
     assert res.json()["enabled"] is False
@@ -279,7 +284,8 @@ def test_auth_setup_and_login_accepts_username(client):
     """Setup and login must accept simple alphanumeric usernames like 'admin'."""
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin", "password": "@Robelshitahun7"},
+        json={"email": "admin", "password": "@Robelshitahun7", "setup_token": "test-setup-token"},
+        headers={"Origin": "http://testserver"},
     )
     assert setup_res.status_code == 200
     assert setup_res.json()["user"]["email"] == "admin"
@@ -287,6 +293,7 @@ def test_auth_setup_and_login_accepts_username(client):
     login_res = client.post(
         "/api/auth/login",
         json={"email": "admin", "password": "@Robelshitahun7"},
+        headers={"Origin": "http://testserver"},
     )
     assert login_res.status_code == 200
     assert login_res.json()["user"]["email"] == "admin"

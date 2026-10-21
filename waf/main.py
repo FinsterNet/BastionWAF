@@ -19,8 +19,18 @@ WAF_DIR = Path(__file__).resolve().parent
 if str(WAF_DIR) not in sys.path:
     sys.path.insert(0, str(WAF_DIR))
 
+from datetime import datetime, timezone
+from sqlalchemy import text
 from bastion.core.config import get_config
-from database.db import create_first_admin_atomic, has_users, init_db
+from database.db import (
+    create_first_admin_atomic,
+    get_engine,
+    get_user_by_email,
+    has_users,
+    hash_password,
+    init_db,
+    update_user_password,
+)
 
 
 def free_port(port: int):
@@ -71,6 +81,24 @@ def main():
         success, msg, uid = create_first_admin_atomic(admin_user, admin_password)
         if success:
             print(f"  👑  Default administrator account created: '{admin_user}'")
+    elif admin_user and admin_password:
+        existing = get_user_by_email(admin_user)
+        if existing:
+            update_user_password(existing["id"], admin_password)
+            with get_engine().begin() as conn:
+                conn.execute(
+                    text("UPDATE users SET failed_attempts = 0, locked_until = 0.0 WHERE id = :id"),
+                    {"id": existing["id"]},
+                )
+            print(f"  👑  Administrator credentials synced for: '{admin_user}'")
+        else:
+            h = hash_password(admin_password)
+            with get_engine().begin() as conn:
+                conn.execute(
+                    text("INSERT INTO users (email, password_hash, created_at) VALUES (:e, :h, :c)"),
+                    {"e": admin_user.strip().lower(), "h": h, "c": datetime.now(timezone.utc).isoformat()},
+                )
+            print(f"  👑  Administrator account provisioned: '{admin_user}'")
 
     print("=" * 72)
     print("  Press CTRL+C to stop Bastion WAF.\n")

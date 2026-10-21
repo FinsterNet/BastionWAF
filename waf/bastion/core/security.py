@@ -42,6 +42,14 @@ def get_master_key() -> bytes:
     return new_key
 
 
+def get_encryption_key() -> bytes:
+    """Retrieve or derive 32-byte encryption key for TOTP secrets."""
+    env_key = os.environ.get("BASTION_ENCRYPTION_KEY")
+    if env_key:
+        return hashlib.sha256(env_key.encode("utf-8")).digest()
+    return get_master_key()
+
+
 # Check for optional argon2-cffi
 HAS_ARGON2 = False
 _argon2_hasher = None
@@ -184,7 +192,7 @@ def generate_totp_secret() -> str:
 
 def encrypt_totp_secret(secret: str) -> str:
     """Encrypt TOTP secret using Master Key with HMAC verification."""
-    key = get_master_key()
+    key = get_encryption_key()
     iv = secrets.token_bytes(16)
     # Simple XOR-stream with SHA-256 KDF for portability
     derived_enc_key = hashlib.sha256(key + b":enc:" + iv).digest()
@@ -208,7 +216,7 @@ def decrypt_totp_secret(encrypted_b64: str) -> Optional[str]:
         mac = combined[16:48]
         encrypted_bytes = combined[48:]
 
-        key = get_master_key()
+        key = get_encryption_key()
         derived_enc_key = hashlib.sha256(key + b":enc:" + iv).digest()
         derived_mac_key = hashlib.sha256(key + b":mac:" + iv).digest()
 

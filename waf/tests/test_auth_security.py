@@ -37,11 +37,18 @@ from bastion.core.security import (
 from database import db
 
 
+SETUP_TOKEN = "test-setup-token-12345"
+
+
 @pytest.fixture(autouse=True)
 def clean_test_db(tmp_path, monkeypatch):
     """Use an isolated test database for every test to guarantee clean state."""
     test_db = tmp_path / "test_waf.db"
+    monkeypatch.setenv("BASTION_DB_PATH", str(test_db))
     monkeypatch.setattr(db, "DB_PATH", test_db)
+    monkeypatch.setenv("BASTION_SETUP_TOKEN", SETUP_TOKEN)
+    from api.auth import reset_rate_limits
+    reset_rate_limits()
     db.init_db()
     yield
     if test_db.exists():
@@ -53,7 +60,7 @@ def clean_test_db(tmp_path, monkeypatch):
 
 @pytest.fixture
 def client():
-    return TestClient(app)
+    return TestClient(app, base_url="http://testserver", headers={"Origin": "http://testserver"})
 
 
 # ============================================================
@@ -116,7 +123,7 @@ def test_initial_setup_and_session_issuance(client):
     """Initial admin setup creates the account, issues session cookie, and returns CSRF token."""
     res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     assert res.status_code == 200
     data = res.json()
@@ -131,7 +138,7 @@ def test_initial_setup_and_session_issuance(client):
     # Subsequent setup attempts must be blocked
     res2 = client.post(
         "/api/auth/setup",
-        json={"email": "hacker@evil.com", "password": "AnotherAdminPassword123!"},
+        json={"email": "hacker@evil.com", "password": "AnotherAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     assert res2.status_code == 400
     assert "already been completed" in res2.text
@@ -145,7 +152,7 @@ def test_login_success_and_session_rotation(client):
     """Valid credentials authenticate user, issue new session, and rotate session ID."""
     client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
 
     # Login
@@ -162,7 +169,7 @@ def test_login_brute_force_lockout_after_5_failures(client):
     """5 consecutive failed attempts lock the account for 15 minutes with generic error."""
     client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
 
     # Attempt 1 to 4: generic "Invalid email or password"
@@ -200,7 +207,7 @@ def test_unknown_email_returns_same_generic_message(client):
     """Non-existent emails must return exact same message to prevent enumeration."""
     client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
 
     res = client.post(
@@ -220,7 +227,7 @@ def test_csrf_token_required_on_state_modifications(client):
     # 1. Setup admin
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     csrf_token = setup_res.json()["csrf_token"]
     cookie_val = setup_res.cookies.get(SESSION_COOKIE_NAME)
@@ -253,7 +260,7 @@ def test_logout_invalidates_session(client):
     """Logout terminates session row and invalidates cookie."""
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     cookie_val = setup_res.cookies.get(SESSION_COOKIE_NAME)
 
@@ -279,7 +286,7 @@ def test_totp_2fa_full_lifecycle(client):
     # 1. Setup admin
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     csrf_token = setup_res.json()["csrf_token"]
     cookie_val = setup_res.cookies.get(SESSION_COOKIE_NAME)
@@ -368,7 +375,7 @@ def test_password_reset_flow_and_session_invalidation(client):
     """Password reset via token updates password and terminates all active sessions."""
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "OldPassword123456!"},
+        json={"email": "admin@bastion.local", "password": "OldPassword123456!", "setup_token": SETUP_TOKEN},
     )
     old_cookie = setup_res.cookies.get(SESSION_COOKIE_NAME)
 
@@ -434,7 +441,7 @@ def test_openapi_and_docs_disabled_publicly(client):
     # Authenticated access to /api/openapi.json must succeed (200)
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     cookie_val = setup_res.cookies.get(SESSION_COOKIE_NAME)
     res_auth_openapi = client.get("/api/openapi.json", cookies={SESSION_COOKIE_NAME: cookie_val})
@@ -472,6 +479,7 @@ def test_setup_token_enforcement(client, monkeypatch):
         },
     )
     assert res_wrong_token.status_code == 403
+    assert "Invalid setup token" in res_wrong_token.json()["detail"]
 
     # Attempt setup with CORRECT token -> 200
     res_correct = client.post(
@@ -490,9 +498,10 @@ def test_simulate_does_not_pollute_real_logs(client):
     """Payload simulations must evaluate threats without writing to real production events."""
     setup_res = client.post(
         "/api/auth/setup",
-        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!"},
+        json={"email": "admin@bastion.local", "password": "SuperSecureAdminPassword123!", "setup_token": SETUP_TOKEN},
     )
     cookie_val = setup_res.cookies.get(SESSION_COOKIE_NAME)
+    csrf_token = setup_res.json()["csrf_token"]
 
     # Confirm zero events initially
     with db.get_connection() as conn:
@@ -511,6 +520,7 @@ def test_simulate_does_not_pollute_real_logs(client):
             "headers": {},
             "client_ip": "192.168.1.100",
         },
+        headers={"X-CSRF-Token": csrf_token},
         cookies={SESSION_COOKIE_NAME: cookie_val},
     )
     assert sim_res.status_code == 200

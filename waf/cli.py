@@ -25,10 +25,22 @@ from database.db import (
 )
 
 
+import getpass
+
+
 def cmd_create_admin(args):
     init_db()
     email = args.email.strip().lower()
-    password = args.password
+    try:
+        password = getpass.getpass("Enter administrator password (min 12 characters): ")
+        confirm = getpass.getpass("Confirm password: ")
+    except (EOFError, KeyboardInterrupt):
+        print("\n❌ Operation cancelled.")
+        sys.exit(1)
+
+    if password != confirm:
+        print("❌ Error: Passwords do not match.")
+        sys.exit(1)
 
     success, msg, user_id = create_user(email, password)
     if success:
@@ -46,7 +58,18 @@ def cmd_reset_password(args):
         print(f"❌ No administrator account found with email '{email}'.")
         sys.exit(1)
 
-    success, msg = update_user_password(user["id"], args.password)
+    try:
+        password = getpass.getpass(f"Enter new password for '{email}' (min 12 characters): ")
+        confirm = getpass.getpass("Confirm password: ")
+    except (EOFError, KeyboardInterrupt):
+        print("\n❌ Operation cancelled.")
+        sys.exit(1)
+
+    if password != confirm:
+        print("❌ Error: Passwords do not match.")
+        sys.exit(1)
+
+    success, msg = update_user_password(user["id"], password)
     if success:
         print(f"✅ Password for '{email}' successfully reset. All active sessions terminated.")
     else:
@@ -83,6 +106,32 @@ def cmd_list_users(args):
     print("=" * 70 + "\n")
 
 
+def create_admin_cmd(email: str) -> bool:
+    """Programmatic helper to invoke create-admin CLI logic."""
+    class Args:
+        pass
+    args = Args()
+    args.email = email
+    try:
+        cmd_create_admin(args)
+        return True
+    except SystemExit as e:
+        return e.code == 0
+
+
+def reset_password_cmd(email: str) -> bool:
+    """Programmatic helper to invoke reset-password CLI logic."""
+    class Args:
+        pass
+    args = Args()
+    args.email = email
+    try:
+        cmd_reset_password(args)
+        return True
+    except SystemExit as e:
+        return e.code == 0
+
+
 def main():
     parser = argparse.ArgumentParser(description="Bastion WAF Administrative Security CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -90,13 +139,11 @@ def main():
     # create-admin
     p_create = subparsers.add_parser("create-admin", help="Create a new administrator account")
     p_create.add_argument("--email", required=True, help="Administrator email address")
-    p_create.add_argument("--password", required=True, help="Strong password (min 12 characters)")
     p_create.set_defaults(func=cmd_create_admin)
 
     # reset-password
     p_reset = subparsers.add_parser("reset-password", help="Reset password for an existing administrator")
     p_reset.add_argument("--email", required=True, help="Administrator email address")
-    p_reset.add_argument("--password", required=True, help="New password (min 12 characters)")
     p_reset.set_defaults(func=cmd_reset_password)
 
     # unlock
@@ -108,8 +155,30 @@ def main():
     p_list = subparsers.add_parser("list-users", help="List registered administrator accounts")
     p_list.set_defaults(func=cmd_list_users)
 
+    # migrate-to-postgres
+    p_mig = subparsers.add_parser("migrate-to-postgres", help="Migrate SQLite database records to PostgreSQL")
+    p_mig.add_argument("--sqlite-path", default=None, help="Path to source SQLite file (default: BASTION_DB_PATH)")
+    p_mig.add_argument("--pg-url", default=None, help="Target PostgreSQL connection URL (default: DATABASE_URL)")
+    p_mig.set_defaults(func=cmd_migrate_to_postgres)
+
     args = parser.parse_args()
     args.func(args)
+
+
+def cmd_migrate_to_postgres(args):
+    from database.db import migrate_sqlite_to_postgres
+    sqlite_path = args.sqlite_path
+    pg_url = args.pg_url
+    print("🚚 Initiating migration from SQLite to PostgreSQL...")
+    ok, msg, counts = migrate_sqlite_to_postgres(sqlite_path=sqlite_path, pg_url=pg_url)
+    if ok:
+        print(f"✅ {msg}")
+        print("📊 Migrated Records:")
+        for table, cnt in counts.items():
+            print(f"   • {table}: {cnt}")
+    else:
+        print(f"❌ {msg}")
+        sys.exit(1)
 
 
 if __name__ == "__main__":

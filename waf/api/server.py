@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 
 from api.auth import (
     auth_router,
+    get_allowed_origins,
     get_client_ip,
     get_current_session,
     require_auth,
@@ -31,6 +32,7 @@ from database.db import (
     clear_logs,
     delete_site,
     export_logs_csv,
+    get_audit_logs,
     get_enabled_rule_ids,
     get_logs,
     get_recent_events,
@@ -274,12 +276,14 @@ class PayloadSimulateRequest(BaseModel):
 @api_router.post("/api/simulate")
 def simulate_payload(
     req: PayloadSimulateRequest,
+    request: Request,
     session: Dict[str, Any] = Depends(require_auth),
 ):
     """
     Evaluate payload simulation inside threat sandbox (authenticated).
     Rate-limited, size-capped, and kept isolated from production threat logs.
     """
+    verify_csrf_or_abort(request, session)
     check_simulate_rate_limit(req.client_ip)
 
     inspection = inspect_request(
@@ -316,6 +320,15 @@ def simulate_payload(
     }
 
 
+@api_router.get("/api/audit")
+def get_audit(
+    limit: int = Query(50, ge=1, le=200),
+    session: Dict[str, Any] = Depends(require_auth),
+):
+    """Retrieve security audit logs without sensitive secrets (authenticated)."""
+    return get_audit_logs(limit=limit)
+
+
 @api_router.get("/api/openapi.json")
 def get_authenticated_openapi(session: Dict[str, Any] = Depends(require_auth)):
     """Authenticated OpenAPI specification (disabled for unauthenticated public)."""
@@ -327,46 +340,90 @@ def get_authenticated_openapi(session: Dict[str, Any] = Depends(require_auth)):
 # FastAPI App Initialization & Security Middleware
 # ============================================================
 
+BASTION_DEBUG = os.environ.get("BASTION_DEBUG") == "1"
+
 app = FastAPI(
     title="Bastion WAF API & Dashboard Server",
-    docs_url=None,      # Disable public Swagger UI
-    redoc_url=None,     # Disable public ReDoc
-    openapi_url=None,   # Disable public openapi.json
+    docs_url="/docs" if BASTION_DEBUG else None,
+    redoc_url="/redoc" if BASTION_DEBUG else None,
+    openapi_url="/openapi.json" if BASTION_DEBUG else None,
 )
 
-# Security Headers Middleware (Step 9)
+# Security Headers & Redirect Middleware
 @app.middleware("http")
 async def add_security_headers(request: Request, call_next):
+    # 1. HTTP to HTTPS redirect if X-Forwarded-Proto is http
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    if forwarded_proto == "http":
+        url = request.url.replace(scheme="https")
+        return Response(status_code=301, headers={"Location": str(url)})
+
     response = await call_next(request)
     response.headers["X-Content-Type-Options"] = "nosniff"
     response.headers["X-Frame-Options"] = "DENY"
     response.headers["Referrer-Policy"] = "same-origin"
-    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
-    # Basic Content Security Policy allowing local self scripts, fonts, and Chart.js
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
     response.headers["Content-Security-Policy"] = (
         "default-src 'self'; "
-        "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
         "font-src 'self' https://fonts.gstatic.com; "
         "img-src 'self' data:; "
-        "connect-src 'self';"
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
     )
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+
     return response
 
 
-# Locked-down CORS configuration (Step 6)
+# Locked-down CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:8000",
-        "http://localhost:8000",
-        "http://127.0.0.1:8080",
-        "http://localhost:8080",
-    ],
+    allow_origins=get_allowed_origins(),
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
+
+PUBLIC_API_ALLOWLIST = {
+    "/api/auth/login",
+    "/api/auth/status",
+    "/api/auth/2fa/verify",
+    "/api/auth/reset/request",
+    "/api/auth/reset/confirm",
+    "/api/auth/setup",
+}
+PUBLIC_API_ROUTES = PUBLIC_API_ALLOWLIST
+
+
+def audit_route_coverage(fastapi_app: FastAPI):
+    """Deploy-time check asserting every /api/* route is either authenticated or allowlisted."""
+    unprotected = []
+    for route in fastapi_app.routes:
+        path = getattr(route, "path", "")
+        if not path.startswith("/api/"):
+            continue
+        if path in PUBLIC_API_ALLOWLIST:
+            continue
+
+        route_deps = getattr(route, "dependencies", []) or []
+        dependant = getattr(route, "dependant", None)
+        all_deps = list(route_deps)
+        if dependant:
+            all_deps.extend(dependant.dependencies or [])
+
+        dep_callables = [d.dependency for d in all_deps if hasattr(d, "dependency")]
+        if require_auth not in dep_callables:
+            unprotected.append(f"{getattr(route, 'methods', '')} {path}")
+
+    if unprotected:
+        logger.critical(
+            "🚨 CRITICAL SECURITY ALERT: Unauthenticated /api/* route(s) detected without allowlisting:\n%s",
+            "\n".join(f"  - {u}" for u in unprotected),
+        )
 
 # Mount authentication router and protected management router
 app.include_router(auth_router)

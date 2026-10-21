@@ -6,15 +6,17 @@ dynamic upstream routing, live telemetry logging, and defense bypass support.
 from contextlib import asynccontextmanager
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Optional, Tuple
 import httpx
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from api.auth import auth_router
+from api.auth import auth_router, get_allowed_origins, require_auth
 from api.server import api_router
 from .config import get_config
 from .engine import Engine
@@ -48,16 +50,101 @@ HOP_BY_HOP_HEADERS = {
 }
 
 
+PUBLIC_API_ALLOWLIST = {
+    "/api/auth/login",
+    "/api/auth/status",
+    "/api/auth/2fa/verify",
+    "/api/auth/reset/request",
+    "/api/auth/reset/confirm",
+    "/api/auth/setup",
+}
+
+
+def audit_route_coverage(fastapi_app: FastAPI):
+    """Deploy-time check asserting every /api/* route is either authenticated or allowlisted."""
+    unprotected = []
+    for route in fastapi_app.routes:
+        path = getattr(route, "path", "")
+        if not path.startswith("/api/"):
+            continue
+        if path in PUBLIC_API_ALLOWLIST:
+            continue
+
+        route_deps = getattr(route, "dependencies", []) or []
+        dependant = getattr(route, "dependant", None)
+        all_deps = list(route_deps)
+        if dependant:
+            all_deps.extend(dependant.dependencies or [])
+
+        dep_callables = [d.dependency for d in all_deps if hasattr(d, "dependency")]
+        if require_auth not in dep_callables:
+            unprotected.append(f"{getattr(route, 'methods', '')} {path}")
+
+    if unprotected:
+        logger.critical(
+            "🚨 CRITICAL SECURITY ALERT: Unauthenticated /api/* route(s) detected without allowlisting:\n%s",
+            "\n".join(f"  - {u}" for u in unprotected),
+        )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     init_db()
+    audit_route_coverage(app)
     telemetry = get_telemetry_logger()
     await telemetry.start()
     yield
     await telemetry.stop()
 
 
-app = FastAPI(title="Bastion WAF Reverse Proxy & Challenge Gateway", lifespan=lifespan)
+BASTION_DEBUG = os.environ.get("BASTION_DEBUG") == "1"
+app = FastAPI(
+    title="Bastion WAF Reverse Proxy & Challenge Gateway",
+    lifespan=lifespan,
+    docs_url="/docs" if BASTION_DEBUG else None,
+    redoc_url="/redoc" if BASTION_DEBUG else None,
+    openapi_url="/openapi.json" if BASTION_DEBUG else None,
+)
+
+# Security Headers & Redirect Middleware
+@app.middleware("http")
+async def security_middleware(request: Request, call_next):
+    # 1. HTTP to HTTPS redirect if X-Forwarded-Proto is http
+    forwarded_proto = request.headers.get("X-Forwarded-Proto")
+    if forwarded_proto == "http":
+        url = request.url.replace(scheme="https")
+        return Response(status_code=301, headers={"Location": str(url)})
+
+    response = await call_next(request)
+    response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains; preload"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "same-origin"
+    response.headers["Content-Security-Policy"] = (
+        "default-src 'self'; "
+        "script-src 'self' https://cdn.jsdelivr.net; "
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; "
+        "font-src 'self' https://fonts.gstatic.com; "
+        "img-src 'self' data:; "
+        "connect-src 'self'; "
+        "frame-ancestors 'none'"
+    )
+    if request.url.path.startswith("/api/"):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, private"
+        response.headers["Pragma"] = "no-cache"
+
+    return response
+
+
+# Locked-down CORS configuration
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=get_allowed_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 engine = Engine()
 app.include_router(auth_router)
 app.include_router(api_router)
@@ -451,6 +538,11 @@ async def waf_proxy(request: Request, path: str):
     # Skip proxying the internal verification endpoint
     if path == "__bastion_captcha_verify__":
         return JSONResponse({"status": "error", "message": "Use POST method"}, status_code=405)
+
+    # Intercept public API docs routes to prevent upstream leakage
+    norm_path = path.strip("/").lower()
+    if norm_path in ("docs", "redoc", "openapi.json"):
+        return JSONResponse({"detail": "Not Found"}, status_code=404)
 
     body = await request.body()
     target_path = "/" + path if not path.startswith("/") else path

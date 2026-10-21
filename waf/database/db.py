@@ -13,6 +13,8 @@ import sqlite3
 import time
 from typing import Any, Dict, List, Optional, Set, Tuple
 
+import logging
+
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 
@@ -25,6 +27,25 @@ from bastion.core.security import (
     validate_password_strength,
     verify_password,
 )
+
+logger = logging.getLogger("bastion.database")
+
+
+def get_db_path() -> Path:
+    """Retrieve database path from BASTION_DB_PATH env var or default to local waf.db."""
+    env_path = os.environ.get("BASTION_DB_PATH")
+    if env_path and env_path.strip():
+        p = Path(env_path.strip()).resolve()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+    if "DB_PATH" in globals() and DB_PATH is not None:
+        p = Path(DB_PATH).resolve()
+        p.parent.mkdir(parents=True, exist_ok=True)
+        return p
+    default_p = Path(__file__).resolve().parent / "waf.db"
+    default_p.parent.mkdir(parents=True, exist_ok=True)
+    return default_p
+
 
 DB_PATH = Path(__file__).resolve().parent / "waf.db"
 
@@ -92,7 +113,7 @@ def get_db_url() -> str:
         if env_url.startswith("postgresql://") and not env_url.startswith("postgresql+"):
             return env_url.replace("postgresql://", "postgresql+psycopg://", 1)
         return env_url
-    return f"sqlite:///{Path(DB_PATH).resolve()}"
+    return f"sqlite:///{get_db_path()}"
 
 
 def is_postgres() -> bool:
@@ -147,6 +168,7 @@ def _execute_multi_ddl(conn, ddl_text: str):
 
 def init_db():
     """Initialize database tables, indexes, and seed default rules."""
+    reset_engine()
     engine = get_engine()
     is_pg = is_postgres()
 
@@ -363,6 +385,218 @@ def init_db():
         conn.execute(
             text("DELETE FROM protected_sites WHERE domain = '127.0.0.1:8080' AND upstream = '127.0.0.1:3000'")
         )
+
+        # Auto-migrate from SQLite to PostgreSQL if PostgreSQL is empty and local SQLite has users
+        if is_pg:
+            try:
+                cnt = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+                if (cnt or 0) == 0:
+                    sqlite_path = get_db_path()
+                    if sqlite_path.exists():
+                        with sqlite3.connect(sqlite_path) as s_conn:
+                            s_cur = s_conn.cursor()
+                            s_cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+                            if s_cur.fetchone():
+                                s_cnt = s_cur.execute("SELECT COUNT(*) FROM users").fetchone()[0]
+                                if (s_cnt or 0) > 0:
+                                    logger.info("🚚 Auto-migrating existing data from SQLite (%s) to PostgreSQL...", sqlite_path)
+                                    ok, msg, m_counts = migrate_sqlite_to_postgres(str(sqlite_path))
+                                    logger.info("🚚 Auto-migration completed: %s (%s)", msg, m_counts)
+            except Exception as e:
+                logger.warning("Auto-migration check skipped: %s", e)
+
+    startup_self_check()
+
+
+def migrate_sqlite_to_postgres(sqlite_path: Optional[str] = None, pg_url: Optional[str] = None) -> Tuple[bool, str, Dict[str, int]]:
+    """
+    Migrate users, waf_rules, protected_sites, and audit_actions from SQLite to PostgreSQL.
+    Safely transfers records and synchronizes PostgreSQL sequences.
+    """
+    src_path = Path(sqlite_path or get_db_path()).resolve()
+    if not src_path.exists():
+        return False, f"Source SQLite file does not exist: {src_path}", {}
+
+    target_url = pg_url or get_db_url()
+    if target_url.startswith("sqlite"):
+        return False, "Target database URL is SQLite, expected PostgreSQL", {}
+
+    counts = {"users": 0, "waf_rules": 0, "protected_sites": 0, "audit_actions": 0}
+
+    try:
+        # 1. Read records from SQLite
+        with sqlite3.connect(src_path) as s_conn:
+            s_conn.row_factory = sqlite3.Row
+            s_cur = s_conn.cursor()
+
+            users = []
+            try:
+                s_cur.execute("SELECT * FROM users")
+                users = [dict(r) for r in s_cur.fetchall()]
+            except Exception:
+                pass
+
+            rules = []
+            try:
+                s_cur.execute("SELECT * FROM waf_rules")
+                rules = [dict(r) for r in s_cur.fetchall()]
+            except Exception:
+                pass
+
+            sites = []
+            try:
+                s_cur.execute("SELECT * FROM protected_sites")
+                sites = [dict(r) for r in s_cur.fetchall()]
+            except Exception:
+                pass
+
+            audits = []
+            try:
+                s_cur.execute("SELECT * FROM audit_actions")
+                audits = [dict(r) for r in s_cur.fetchall()]
+            except Exception:
+                pass
+
+        # 2. Write to PostgreSQL using target engine
+        pg_engine = create_engine(
+            target_url,
+            poolclass=QueuePool,
+            pool_size=5,
+            max_overflow=10,
+        )
+
+        with pg_engine.begin() as p_conn:
+            # Users
+            for u in users:
+                p_conn.execute(
+                    text("""
+                    INSERT INTO users (id, email, password_hash, totp_secret_encrypted, totp_enabled, failed_attempts, locked_until, created_at)
+                    VALUES (:id, :email, :password_hash, :totp_secret_encrypted, :totp_enabled, :failed_attempts, :locked_until, :created_at)
+                    ON CONFLICT (id) DO UPDATE SET
+                        password_hash = EXCLUDED.password_hash,
+                        totp_secret_encrypted = EXCLUDED.totp_secret_encrypted,
+                        totp_enabled = EXCLUDED.totp_enabled,
+                        failed_attempts = EXCLUDED.failed_attempts,
+                        locked_until = EXCLUDED.locked_until
+                    """),
+                    u,
+                )
+                counts["users"] += 1
+
+            # Sync users sequence
+            if users:
+                try:
+                    p_conn.execute(text("SELECT setval(pg_get_serial_sequence('users', 'id'), COALESCE(MAX(id), 1)) FROM users"))
+                except Exception:
+                    pass
+
+            # Rules
+            for r in rules:
+                p_conn.execute(
+                    text("""
+                    INSERT INTO waf_rules (rule_id, rule_name, category, enabled)
+                    VALUES (:rule_id, :rule_name, :category, :enabled)
+                    ON CONFLICT (rule_id) DO UPDATE SET
+                        enabled = EXCLUDED.enabled,
+                        rule_name = EXCLUDED.rule_name,
+                        category = EXCLUDED.category
+                    """),
+                    r,
+                )
+                counts["waf_rules"] += 1
+
+            # Sites
+            for s in sites:
+                p_conn.execute(
+                    text("""
+                    INSERT INTO protected_sites (id, domain, upstream, ssl_status, defense_mode)
+                    VALUES (:id, :domain, :upstream, :ssl_status, :defense_mode)
+                    ON CONFLICT (domain) DO UPDATE SET
+                        upstream = EXCLUDED.upstream,
+                        ssl_status = EXCLUDED.ssl_status,
+                        defense_mode = EXCLUDED.defense_mode
+                    """),
+                    s,
+                )
+                counts["protected_sites"] += 1
+
+            if sites:
+                try:
+                    p_conn.execute(text("SELECT setval(pg_get_serial_sequence('protected_sites', 'id'), COALESCE(MAX(id), 1)) FROM protected_sites"))
+                except Exception:
+                    pass
+
+            # Audits
+            for a in audits:
+                p_conn.execute(
+                    text("""
+                    INSERT INTO audit_actions (user_id, email, action, details, ip, timestamp)
+                    VALUES (:user_id, :email, :action, :details, :ip, :timestamp)
+                    """),
+                    {
+                        "user_id": a.get("user_id"),
+                        "email": a.get("email"),
+                        "action": a.get("action"),
+                        "details": a.get("details"),
+                        "ip": a.get("ip"),
+                        "timestamp": a.get("timestamp"),
+                    },
+                )
+                counts["audit_actions"] += 1
+
+            if audits:
+                try:
+                    p_conn.execute(text("SELECT setval(pg_get_serial_sequence('audit_actions', 'id'), COALESCE(MAX(id), 1)) FROM audit_actions"))
+                except Exception:
+                    pass
+
+        pg_engine.dispose()
+        return True, "Migration completed successfully", counts
+    except Exception as e:
+        logger.exception("PostgreSQL migration failed: %s", e)
+        return False, f"Migration failed: {str(e)}", counts
+
+
+def startup_self_check():
+    """
+    Startup self-check:
+    1. Read and log database path and user count.
+    2. Log clear WARNING if running on Render and DB is not persistent (/var/data).
+    3. Refuse to start in production if BASTION_SETUP_TOKEN, BASTION_SECRET_KEY, or BASTION_ENCRYPTION_KEY are missing.
+    """
+    is_render = os.environ.get("RENDER", "").lower() in ("true", "1")
+    is_production = is_render or os.environ.get("BASTION_ENV", "").lower() == "production"
+
+    if is_production:
+        missing = []
+        for key in ("BASTION_SETUP_TOKEN", "BASTION_SECRET_KEY", "BASTION_ENCRYPTION_KEY"):
+            if not os.environ.get(key):
+                missing.append(key)
+        if missing:
+            raise RuntimeError(
+                f"FATAL: Production mode requires environment variables: {', '.join(missing)}. Startup refused."
+            )
+
+    active_url = get_db_url()
+    if active_url.startswith("sqlite"):
+        db_p = str(get_db_path())
+        if is_render and not db_p.startswith("/var/data"):
+            logger.warning(
+                "⚠️ WARNING: Database path '%s' is NOT on persistent storage on Render! "
+                "All users, sessions, and data will be wiped on redeploy. "
+                "Attach a persistent disk at /var/data and set BASTION_DB_PATH=/var/data/bastion.db",
+                db_p,
+            )
+        logger.info("📦 Database Engine: SQLite | Path: %s", db_p)
+    else:
+        logger.info("📦 Database Engine: PostgreSQL | Persistent Connection Active")
+
+    try:
+        with get_engine().connect() as conn:
+            cnt = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+            logger.info("🛡️ Bastion Startup Self-Check: Database Path: %s | Registered Users: %d", str(get_db_path()), cnt)
+    except Exception as e:
+        logger.warning("Bastion Startup Self-Check: Could not count users: %s", e)
 
 
 def log_event(
@@ -786,17 +1020,34 @@ def create_first_admin_atomic(email: str, password: str) -> Tuple[bool, str, Opt
     now_iso = datetime.now(timezone.utc).isoformat()
 
     try:
-        with get_engine().begin() as conn:
-            cnt = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
-            if cnt > 0:
-                return False, "Initial setup has already been completed.", None
-
-            res = conn.execute(
-                text("INSERT INTO users (email, password_hash, created_at) VALUES (:email, :pwd, :created_at) RETURNING id"),
-                {"email": clean_email, "pwd": pwd_hash, "created_at": now_iso},
-            )
-            user_id = res.scalar_one()
-            return True, "Administrator created successfully", user_id
+        if is_postgres():
+            with get_engine().begin() as conn:
+                conn.execute(text("LOCK TABLE users IN EXCLUSIVE MODE"))
+                cnt = conn.execute(text("SELECT COUNT(*) FROM users")).scalar_one()
+                if cnt > 0:
+                    return False, "Initial setup has already been completed.", None
+                res = conn.execute(
+                    text("INSERT INTO users (email, password_hash, created_at) VALUES (:email, :pwd, :created_at) RETURNING id"),
+                    {"email": clean_email, "pwd": pwd_hash, "created_at": now_iso},
+                )
+                user_id = res.scalar_one()
+                return True, "Administrator created successfully", user_id
+        else:
+            with sqlite3.connect(Path(get_db_path()).resolve()) as raw_conn:
+                raw_conn.execute("BEGIN IMMEDIATE")
+                cursor = raw_conn.cursor()
+                cursor.execute("SELECT COUNT(*) FROM users")
+                cnt = cursor.fetchone()[0]
+                if cnt > 0:
+                    raw_conn.rollback()
+                    return False, "Initial setup has already been completed.", None
+                cursor.execute(
+                    "INSERT INTO users (email, password_hash, created_at) VALUES (?, ?, ?)",
+                    (clean_email, pwd_hash, now_iso),
+                )
+                user_id = cursor.lastrowid
+                raw_conn.commit()
+                return True, "Administrator created successfully", user_id
     except Exception as e:
         return False, f"Failed to create user: {str(e)}", None
 
@@ -888,7 +1139,12 @@ def authenticate_user(email: str, password: str, ip: str) -> Tuple[bool, str, Op
     pwd_valid = verify_password(password, user["password_hash"])
     if not pwd_valid:
         failed = user.get("failed_attempts", 0) + 1
-        locked_until = now + LOCKOUT_DURATION_SECONDS if failed >= MAX_FAILED_ATTEMPTS else 0.0
+        if failed >= MAX_FAILED_ATTEMPTS:
+            doubling_exp = min(failed - MAX_FAILED_ATTEMPTS, 7)
+            duration = min(86400, LOCKOUT_DURATION_SECONDS * (2 ** doubling_exp))
+            locked_until = now + duration
+        else:
+            locked_until = 0.0
         with get_engine().begin() as conn:
             conn.execute(
                 text("UPDATE users SET failed_attempts = :failed, locked_until = :locked_until WHERE id = :id"),
@@ -1157,3 +1413,51 @@ def log_audit_action(user_id: Optional[int], email: Optional[str], action: str, 
                 "timestamp": now_iso,
             },
         )
+
+
+def get_user_sessions(user_id: int) -> List[Dict[str, Any]]:
+    """Return active sessions for user, purging expired and idle sessions."""
+    cleanup_expired_sessions()
+    now = time.time()
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            text("""
+            SELECT id, ip, user_agent, created_at, last_seen_at
+            FROM sessions
+            WHERE user_id = :uid AND expires_at > :now AND (:now - last_seen_at) <= :idle
+            ORDER BY last_seen_at DESC
+            """),
+            {"uid": int(user_id), "now": now, "idle": IDLE_TIMEOUT_SECONDS},
+        ).mappings().fetchall()
+        return [dict(r) for r in rows]
+
+
+def revoke_session_by_id(user_id: int, session_id: int) -> bool:
+    """Revoke a specific session owned by user_id."""
+    with get_engine().begin() as conn:
+        res = conn.execute(
+            text("DELETE FROM sessions WHERE id = :sid AND user_id = :uid"),
+            {"sid": int(session_id), "uid": int(user_id)},
+        )
+        return res.rowcount > 0
+
+
+def revoke_other_sessions(user_id: int, keep_session_id: int) -> int:
+    """Revoke all active sessions for user_id except keep_session_id."""
+    with get_engine().begin() as conn:
+        res = conn.execute(
+            text("DELETE FROM sessions WHERE user_id = :uid AND id != :keep_sid"),
+            {"uid": int(user_id), "keep_sid": int(keep_session_id)},
+        )
+        return res.rowcount
+
+
+def get_audit_logs(limit: int = 50) -> List[Dict[str, Any]]:
+    """Fetch latest security audit log records with safe parameterized limit."""
+    safe_limit = max(1, min(int(limit), 200))
+    with get_engine().connect() as conn:
+        rows = conn.execute(
+            text("SELECT id, user_id, email, action, details, ip, timestamp FROM audit_actions ORDER BY id DESC LIMIT :lim"),
+            {"lim": safe_limit},
+        ).mappings().fetchall()
+        return [dict(r) for r in rows]

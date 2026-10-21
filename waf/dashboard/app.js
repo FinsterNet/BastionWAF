@@ -105,7 +105,10 @@ function switchNav(tabId, el) {
 
     if (tabId === 'sites') fetchSites();
     if (tabId === 'rules') fetchRules();
-    if (tabId === 'logs') fetchAuditLogs();
+    if (tabId === 'logs') {
+        fetchAuditLogs();
+        fetchAdminAuditLogs();
+    }
     if (tabId === 'system') fetchSystem();
 }
 
@@ -367,9 +370,8 @@ function onAuthSuccess(user, csrfToken) {
 
 async function handleLogout() {
     try {
-        await fetch('/api/auth/logout', {
+        await authFetch('/api/auth/logout', {
             method: 'POST',
-            credentials: 'same-origin',
         });
     } catch (err) {}
 
@@ -417,6 +419,8 @@ function openSecurityModal() {
         enabledBox.style.display = 'none';
         disabledBox.style.display = 'block';
     }
+
+    fetchUserSessions();
 }
 
 async function initiate2FASetup() {
@@ -539,6 +543,126 @@ async function handleChangePassword() {
         }
     } catch (e) {
         showToast('Network error updating password');
+    }
+}
+
+// ---- Active Sessions Management ----
+async function fetchUserSessions() {
+    const tbody = document.getElementById('active-sessions-tbody');
+    if (!tbody) return;
+    try {
+        const res = await authFetch('/api/auth/sessions');
+        if (!res.ok) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 12px;">Unable to load sessions</td></tr>`;
+            return;
+        }
+        const data = await res.json();
+        const sessions = data.sessions || [];
+        if (sessions.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted); padding: 12px;">No active sessions found</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = sessions.map(s => {
+            const currentBadge = s.is_current ? `<span class="badge badge-green" style="margin-left: 6px;">Current</span>` : '';
+            const actionBtn = s.is_current 
+                ? `<span style="color: var(--text-muted); font-size: 0.72rem;">This Session</span>`
+                : `<button class="btn btn-outline" style="padding: 2px 7px; font-size: 0.72rem; color: var(--danger); border-color: rgba(239, 68, 68, 0.4);" onclick="revokeSession('${s.id}')">Revoke</button>`;
+
+            return `
+                <tr>
+                    <td><code>${escapeHtml(s.ip_address || '—')}</code>${currentBadge}</td>
+                    <td style="max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(s.user_agent || '')}">${escapeHtml(s.user_agent || 'Unknown')}</td>
+                    <td style="font-family: var(--font-mono); font-size: 0.74rem;">${escapeHtml(s.last_active || '—')}</td>
+                    <td style="text-align: right;">${actionBtn}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--danger); padding: 12px;">Error loading sessions</td></tr>`;
+    }
+}
+
+async function revokeSession(sessionId) {
+    try {
+        const res = await authFetch(`/api/auth/sessions/${encodeURIComponent(sessionId)}`, {
+            method: 'DELETE',
+        });
+        if (res.ok) {
+            showToast('Session revoked');
+            fetchUserSessions();
+        } else {
+            const data = await res.json();
+            showToast(data.detail || 'Failed to revoke session');
+        }
+    } catch (err) {
+        showToast('Error revoking session');
+    }
+}
+
+async function revokeAllOtherSessions() {
+    try {
+        const res = await authFetch('/api/auth/sessions/revoke-others', {
+            method: 'POST',
+        });
+        if (res.ok) {
+            const data = await res.json();
+            showToast(`Revoked ${data.revoked_count || 0} other session(s)`);
+            fetchUserSessions();
+        } else {
+            const data = await res.json();
+            showToast(data.detail || 'Failed to revoke other sessions');
+        }
+    } catch (err) {
+        showToast('Error revoking sessions');
+    }
+}
+
+// ---- Administrative Audit Trail ----
+async function fetchAdminAuditLogs() {
+    const tbody = document.getElementById('admin-audit-log-body');
+    if (!tbody) return;
+    try {
+        const res = await authFetch('/api/audit?limit=50');
+        if (!res.ok) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">Unable to load audit trail</td></tr>`;
+            return;
+        }
+        const data = await res.json();
+        const logs = data.logs || [];
+        if (logs.length === 0) {
+            tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 24px;">No administrative events recorded yet.</td></tr>`;
+            return;
+        }
+
+        tbody.innerHTML = logs.map(l => {
+            const statusBadge = l.status === 'success' 
+                ? `<span class="badge badge-green">Success</span>`
+                : (l.status === 'failure' ? `<span class="badge badge-red">Failure</span>` : `<span class="badge badge-cyan">${escapeHtml(l.status || '—')}</span>`);
+            
+            let detailsStr = '';
+            if (l.details) {
+                try {
+                    const parsed = typeof l.details === 'object' ? l.details : JSON.parse(l.details);
+                    detailsStr = Object.entries(parsed).map(([k, v]) => `${k}=${v}`).join(', ');
+                } catch (e) {
+                    detailsStr = String(l.details);
+                }
+            }
+
+            return `
+                <tr>
+                    <td style="font-family: var(--font-mono); font-size: 0.74rem;">${escapeHtml(l.timestamp || '—')}</td>
+                    <td><strong>${escapeHtml(l.action || '—')}</strong></td>
+                    <td style="font-size: 0.76rem;">${escapeHtml(l.user_id ? `User #${l.user_id}` : 'system')}</td>
+                    <td><code>${escapeHtml(l.ip_address || '—')}</code></td>
+                    <td>${statusBadge}</td>
+                    <td style="font-size: 0.76rem; color: var(--text-secondary); max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="${escapeHtml(detailsStr)}">${escapeHtml(detailsStr || '—')}</td>
+                </tr>
+            `;
+        }).join('');
+    } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--danger);">Error loading audit trail</td></tr>`;
     }
 }
 
