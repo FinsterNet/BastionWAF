@@ -23,6 +23,7 @@ from api.auth import (
     require_auth,
     verify_csrf_or_abort,
 )
+from bastion.core.config import get_config
 from bastion.core.engine import Engine
 from bastion.core.inspector import inspect_request
 from database.db import (
@@ -30,6 +31,7 @@ from database.db import (
     clear_logs,
     delete_site,
     export_logs_csv,
+    get_enabled_rule_ids,
     get_logs,
     get_recent_events,
     get_rules,
@@ -288,7 +290,14 @@ def simulate_payload(
         body=req.body.encode("utf-8"),
         client_ip=req.client_ip,
     )
-    scored = sim_engine.evaluate_scored(inspection.request)
+    disabled_rules = set(get_config().get_disabled_rules())
+    try:
+        db_rules = get_enabled_rule_ids()
+        enabled_rules = [r for r in db_rules if r not in disabled_rules] if db_rules is not None else None
+    except Exception:
+        enabled_rules = None
+
+    scored = sim_engine.evaluate_scored(inspection.request, enabled_rule_ids=enabled_rules)
     blocked = (scored.action.value == "BLOCK")
 
     return {

@@ -97,14 +97,21 @@ class URLIPSuggestedAnalyzer:
                 return True, f"Semantic Protocol: Dangerous non-HTTP scheme ({scheme}://)", {"scheme": scheme}
 
         # 2. Extract potential URL host and user-info
-        parsed = urlparse(raw if "://" in raw else f"http://{raw}")
-        hostname = (parsed.hostname or "").lower()
+        hostname = ""
+        try:
+            parsed = urlparse(raw if "://" in raw else f"http://{raw}")
+            hostname = (parsed.hostname or "").lower()
+        except Exception:
+            hostname = ""
 
         # Handle user-info @ trick (e.g. http://google.com@127.0.0.1/)
         if "@" in raw:
-            at_target = raw.split("@")[-1].split("/")[0].split(":")[0]
-            if at_target:
-                hostname = at_target.lower()
+            try:
+                at_target = raw.split("@")[-1].split("/")[0].split(":")[0]
+                if at_target:
+                    hostname = at_target.lower()
+            except Exception:
+                pass
 
         if not hostname:
             match_host = re.search(r"\b(?:localhost|127\.\d{1,3}\.\d{1,3}\.\d{1,3}|169\.254\.169\.254|0\.0\.0\.0|\[::1\])\b", raw)

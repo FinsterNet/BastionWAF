@@ -29,12 +29,12 @@ async function authFetch(url, options = {}) {
     try {
         const res = await fetch(url, options);
         if (res.status === 401) {
-            // Unauthenticated: present login modal and pause background polls
+            // Unauthenticated: present login screen and pause background polls
             if (telemetryTimer) {
                 clearInterval(telemetryTimer);
                 telemetryTimer = null;
             }
-            showAuthModal(false);
+            showLoginView(false);
         }
         return res;
     } catch (err) {
@@ -138,47 +138,62 @@ async function checkAuthStatus() {
         const data = await res.json();
 
         if (data.setup_required) {
-            showAuthModal(true);
+            showLoginView(true);
             return;
         }
 
         if (data.authenticated && data.user) {
             onAuthSuccess(data.user, data.csrf_token);
         } else {
-            showAuthModal(false);
+            showLoginView(false);
         }
     } catch (err) {
         console.error('Failed to check auth status:', err);
-        showAuthModal(false);
+        showLoginView(false);
     }
 }
 
-function showAuthModal(isSetup) {
+function showLoginView(isSetup) {
     isSetupMode = isSetup;
-    const modal = document.getElementById('authModal');
+    const loadingScreen = document.getElementById('app-loading');
+    const authApp = document.getElementById('authenticated-app');
+    const loginView = document.getElementById('login-view');
     const title = document.getElementById('auth-title');
     const subtitle = document.getElementById('auth-subtitle');
     const submitBtn = document.getElementById('auth-submit-btn');
     const forgotLink = document.getElementById('link-forgot-pwd');
     const alertBox = document.getElementById('auth-alert');
 
-    if (alertBox) alertBox.style.display = 'none';
+    if (loadingScreen) loadingScreen.style.display = 'none';
+    if (authApp) authApp.style.display = 'none';
+    if (loginView) loginView.style.display = 'flex';
+
+    if (alertBox) {
+        alertBox.style.display = 'none';
+        alertBox.className = 'auth-alert';
+    }
 
     resetAuthForm();
 
     if (isSetup) {
-        title.textContent = 'Setup Administrator';
-        subtitle.textContent = 'Create the initial administrator account (minimum 12 characters).';
-        submitBtn.textContent = 'Create Administrator Account';
+        if (title) title.textContent = 'Setup Administrator';
+        if (subtitle) subtitle.textContent = 'Create the initial administrator account (minimum 12 characters).';
+        if (submitBtn) submitBtn.textContent = 'Create Administrator Account';
         if (forgotLink) forgotLink.style.display = 'none';
     } else {
-        title.textContent = 'Bastion Security Login';
-        subtitle.textContent = 'Enter your administrator credentials to access the SOC gateway.';
-        submitBtn.textContent = 'Authenticate';
+        if (title) title.textContent = 'Bastion Security Login';
+        if (subtitle) subtitle.textContent = 'Enter your administrator credentials to access the SOC gateway.';
+        if (submitBtn) submitBtn.textContent = 'Authenticate';
         if (forgotLink) forgotLink.style.display = 'block';
     }
 
-    modal?.classList.add('active');
+    setTimeout(() => {
+        document.getElementById('auth-email')?.focus();
+    }, 100);
+}
+
+function showAuthModal(isSetup) {
+    showLoginView(isSetup);
 }
 
 function resetAuthForm() {
@@ -192,6 +207,7 @@ function resetAuthForm() {
 function showAuthError(msg) {
     const alertBox = document.getElementById('auth-alert');
     if (alertBox) {
+        alertBox.className = 'auth-alert';
         alertBox.textContent = msg;
         alertBox.style.display = 'block';
     }
@@ -316,7 +332,17 @@ function onAuthSuccess(user, csrfToken) {
     currentUser = user;
     currentCsrfToken = csrfToken;
 
-    closeModal('authModal');
+    const loadingScreen = document.getElementById('app-loading');
+    const loginView = document.getElementById('login-view');
+    const authApp = document.getElementById('authenticated-app');
+
+    if (loadingScreen) loadingScreen.style.display = 'none';
+    if (loginView) loginView.style.display = 'none';
+    if (authApp) authApp.style.display = 'flex';
+
+    // Clear password input
+    const pwdInput = document.getElementById('auth-password');
+    if (pwdInput) pwdInput.value = '';
 
     // Update Topbar
     const emailChip = document.getElementById('topbar-user-email');
@@ -358,7 +384,12 @@ async function handleLogout() {
     if (emailChip) emailChip.style.display = 'none';
 
     showToast('Session terminated');
-    showAuthModal(false);
+    showLoginView(false);
+    showAuthError('You have been signed out. Please authenticate to continue.');
+    const alertBox = document.getElementById('auth-alert');
+    if (alertBox) {
+        alertBox.className = 'auth-alert success';
+    }
 }
 
 // ---- Security Settings & 2FA Management Modal ----
@@ -757,13 +788,24 @@ async function fetchRules() {
 
 async function toggleRule(ruleId, isChecked) {
     try {
-        await authFetch('/api/rules', {
+        const res = await authFetch('/api/rules', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ rule_id: ruleId, enabled: isChecked })
         });
+        if (!res.ok) {
+            showToast(`Failed to update rule ${ruleId}`);
+            fetchRules();
+            return;
+        }
+        const rule = cachedRules.find(r => r.rule_id === ruleId);
+        if (rule) rule.enabled = isChecked;
         showToast(`Rule ${ruleId}: ${isChecked ? 'Enabled' : 'Disabled'}`);
-    } catch (err) { console.error(err); }
+    } catch (err) {
+        console.error(err);
+        showToast(`Network error updating rule ${ruleId}`);
+        fetchRules();
+    }
 }
 
 // ---- Threat Sandbox ----

@@ -1137,6 +1137,192 @@ input:checked + .slider:before {
 .text-muted { color: var(--text-muted); }
 
 /* ============================================================
+   Dedicated Login Screen & Loading State
+   ============================================================ */
+.app-loading-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: var(--bg-base);
+    z-index: 9999;
+}
+.loading-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+}
+.loading-logo {
+    width: 64px;
+    height: 64px;
+    animation: pulseGlow 2s ease-in-out infinite;
+}
+@keyframes pulseGlow {
+    0%, 100% { transform: scale(1); filter: drop-shadow(0 0 10px rgba(0, 117, 255, 0.4)); }
+    50% { transform: scale(1.05); filter: drop-shadow(0 0 24px rgba(44, 217, 255, 0.8)); }
+}
+.loading-spinner {
+    width: 28px;
+    height: 28px;
+    border: 3px solid rgba(0, 117, 255, 0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+.loading-text {
+    font-size: 0.86rem;
+    color: var(--text-muted);
+    font-family: var(--font-mono);
+    letter-spacing: 0.05em;
+}
+
+.login-screen {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 30%, rgba(0, 117, 255, 0.15) 0%, transparent 60%),
+                radial-gradient(circle at 80% 80%, rgba(121, 40, 202, 0.12) 0%, transparent 50%),
+                var(--bg-base);
+    padding: 24px;
+    z-index: 9000;
+}
+.login-card {
+    background: linear-gradient(127.09deg, rgba(6, 11, 40, 0.96) 19.41%, rgba(10, 14, 35, 0.85) 76.65%);
+    backdrop-filter: blur(120px) saturate(180%);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    width: 100%;
+    max-width: 440px;
+    padding: 34px 32px;
+    box-shadow: 0 25px 60px rgba(0, 0, 0, 0.7), 0 0 30px rgba(0, 117, 255, 0.15);
+    animation: modalPop 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.login-header {
+    text-align: center;
+    margin-bottom: 24px;
+}
+.login-logo {
+    width: 60px;
+    height: 60px;
+    margin-bottom: 12px;
+    filter: drop-shadow(0 0 16px rgba(0, 117, 255, 0.5));
+}
+.login-header h1 {
+    font-size: 1.45rem;
+    font-weight: 800;
+    color: #FFFFFF;
+    letter-spacing: -0.02em;
+}
+.login-header p {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin-top: 4px;
+}
+.login-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: rgba(0, 117, 255, 0.1);
+    border: 1px solid var(--border-hover);
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 0.74rem;
+    color: var(--accent);
+    margin-top: 10px;
+    font-family: var(--font-mono);
+}
+.auth-alert {
+    padding: 11px 14px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    margin-bottom: 18px;
+    background: rgba(239, 68, 68, 0.15);
+    border: 1px solid var(--danger);
+    color: #fca5a5;
+    line-height: 1.4;
+}
+.auth-alert.success {
+    background: rgba(16, 185, 129, 0.15);
+    border-color: var(--success);
+    color: #86efac;
+}
+.form-group {
+    margin-bottom: 16px;
+}
+.form-group label {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+    margin-bottom: 6px;
+}
+.label-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 6px;
+}
+.label-row label {
+    margin-bottom: 0;
+}
+.label-row a {
+    font-size: 0.74rem;
+    color: var(--accent);
+    text-decoration: none;
+    transition: color 0.15s ease;
+}
+.label-row a:hover {
+    color: var(--cyan);
+    text-decoration: underline;
+}
+.btn-block {
+    width: 100%;
+    justify-content: center;
+    padding: 12px;
+    font-weight: 600;
+    font-size: 0.88rem;
+    margin-top: 8px;
+}
+.code-input {
+    font-family: var(--font-mono);
+    font-size: 1.25rem;
+    letter-spacing: 0.25em;
+    text-align: center;
+}
+.auth-notice {
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    text-align: center;
+    margin-bottom: 16px;
+}
+.login-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 24px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 0.72rem;
+    color: var(--text-muted);
+}
+#authenticated-app {
+    display: flex;
+    width: 100%;
+    min-height: 100vh;
+}
+
+/* ============================================================
    Reduced Motion Accessibility
    ============================================================ */
 @media (prefers-reduced-motion: reduce) {

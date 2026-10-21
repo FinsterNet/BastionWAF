@@ -155,7 +155,10 @@ class Engine:
                 verdict = rule.match(request)
             except NotImplementedError:
                 continue
-            if verdict.blocked:
+            except Exception as e:
+                logger.warning("Error evaluating rule %s: %s", getattr(rule, "RULE_ID", "unknown"), e)
+                continue
+            if verdict and verdict.blocked:
                 matched_rules.append(verdict.rule_id)
                 rule_score += getattr(rule, "WEIGHT", 5.0)
                 if not primary_rule_id:
@@ -190,14 +193,17 @@ class Engine:
         }
 
         for val in all_norm_values:
-            sem_score, sem_cat, sem_arch = SemanticEmbeddingEngine.evaluate(val)
-            rule_for_cat = CATEGORY_TO_RULE.get(sem_cat)
-            if enabled_rule_ids is not None and rule_for_cat and rule_for_cat not in enabled_rule_ids:
-                continue
-            if sem_score > max_semantic_score:
-                max_semantic_score = sem_score
-                top_cat = sem_cat
-                top_archetype = sem_arch
+            try:
+                sem_score, sem_cat, sem_arch = SemanticEmbeddingEngine.evaluate(val)
+                rule_for_cat = CATEGORY_TO_RULE.get(sem_cat)
+                if enabled_rule_ids is not None and rule_for_cat and rule_for_cat not in enabled_rule_ids:
+                    continue
+                if sem_score > max_semantic_score:
+                    max_semantic_score = sem_score
+                    top_cat = sem_cat
+                    top_archetype = sem_arch
+            except Exception as e:
+                logger.warning("Error evaluating semantic embedding: %s", e)
 
         # 4. Score Combination (total = w1*rule_score + w2*semantic_score)
         return ScoreCombinationEngine.combine(
